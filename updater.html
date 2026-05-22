@@ -76,15 +76,21 @@ function setStatus(msg, type) {
 }
 
 function parseInput(raw) {
-  // 줄바꿈 기준으로 각 줄 처리
-  let cleaned = raw
-    // 타임스탬프 줄 전체 제거 (청크 헤더 포함 여부 상관없이)
-    .replace(/(오전|오후)\s*\d{1,2}:\d{2}:\d{2}\s*\t*(정보|경고|오류|Info|Warning|Error)?\s*\t*/gi, "")
-    // 청크 헤더 제거
-    .replace(/\[\d+\/\d+\]\s*/g, "")
-    // 탭 문자 제거
+  // 1단계: 줄 단위로 분리
+  const lines = raw.split("\n");
+  const cleaned = lines
+    .map(line => {
+      // 타임스탬프+청크헤더가 있는 줄: 청크헤더 이후 내용만 남김
+      // 예: "오후 1:22:03  정보  [2/8] 기초"..." → "기초"..."
+      const chunkMatch = line.match(/(오전|오후)\s*\d{1,2}:\d{2}:\d{2}.*?\[\d+\/\d+\]\s*(.*)/);
+      if (chunkMatch) return chunkMatch[2];
+      // 타임스탬프만 있는 줄 제거
+      if (/(오전|오후)\s*\d{1,2}:\d{2}:\d{2}/.test(line)) return "";
+      // 청크헤더만 있는 줄: 헤더 제거
+      return line.replace(/\[\d+\/\d+\]\s*/, "");
+    })
+    .join("")  // 줄바꿈 없이 합치기 (URL 잘림 방지)
     .replace(/\t/g, "")
-    // 연속 공백/줄바꿈을 공백 하나로
     .replace(/\s+/g, " ")
     .trim();
 
