@@ -50,8 +50,8 @@
 
   <div class="card">
     <label>📊 Apps Script 로그 데이터</label>
-    <textarea id="jsonInput" rows="12" placeholder="여기에 Apps Script 실행 로그 전체를 붙여넣으세요"></textarea>
-    <p class="tip">💡 타임스탬프(오전 11:02:20 정보)나 청크 헤더([1/2])가 섞여 있어도 자동으로 처리돼요</p>
+    <textarea id="jsonInput" rows="12" placeholder="여기에 Apps Script 실행 로그 전체를 붙여넣으세요&#10;&#10;형식 예시:&#10;오후 3:02:41  정보  PART:meta:{...}&#10;오후 3:02:41  정보  PART:popular:AI 기술:[...]&#10;오후 3:02:41  정보  PART:all:개발 · 프로그래밍:[...]"></textarea>
+    <p class="tip">💡 타임스탬프(오전/오후)와 레벨(정보) 행이 포함되어 있어도 자동으로 처리돼요</p>
     <button class="btn" onclick="deploy()">🚀 배포하기</button>
     <div id="status" class="status"></div>
   </div>
@@ -66,7 +66,7 @@
 
 <script>
 const OWNER = "andrewpark5130-sudo";
-const REPO = "inflearn-dashboard1";
+const REPO  = "inflearn-dashboard1";
 const FILE_PATH = "index.html";
 
 function setStatus(msg, type) {
@@ -75,37 +75,86 @@ function setStatus(msg, type) {
   el.className = `status ${type}`;
 }
 
+// ─────────────────────────────────────────────
+// parseInput: 로그 형식 → 데이터 객체 변환
+//
+// 지원 형식:
+//   오후 3:02:41\t정보\tPART:meta:{...}
+//   오후 3:02:41\t정보\tPART:popular:카테고리명:[...]
+//   오후 3:02:41\t정보\tPART:all:카테고리명:[...]
+// ─────────────────────────────────────────────
 function parseInput(raw) {
-  // 1단계: 줄 단위로 분리
-  const lines = raw.split("\n");
-  const cleaned = lines
-    .map(line => {
-      // 타임스탬프+청크헤더가 있는 줄: 청크헤더 이후 내용만 남김
-      // 예: "오후 1:22:03  정보  [2/8] 기초"..." → "기초"..."
-      const chunkMatch = line.match(/(오전|오후)\s*\d{1,2}:\d{2}:\d{2}.*?\[\d+\/\d+\]\s*(.*)/);
-      if (chunkMatch) return chunkMatch[2];
-      // 타임스탬프만 있는 줄 제거
-      if (/(오전|오후)\s*\d{1,2}:\d{2}:\d{2}/.test(line)) return "";
-      // 청크헤더만 있는 줄: 헤더 제거
-      return line.replace(/\[\d+\/\d+\]\s*/, "");
-    })
-    .join("")  // 줄바꿈 없이 합치기 (URL 잘림 방지)
-    .replace(/\t/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  const result = { popularByCat: {}, allByCat: {} };
+  const errors = [];
 
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("JSON 데이터를 찾을 수 없어요");
-  return JSON.parse(cleaned.slice(start, end + 1));
+  const lines = raw.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // '\t정보\t' 또는 '\t오류\t' 등 — 탭으로 구분된 세 번째 컬럼이 메시지
+    // 형식: [타임스탬프]\t[레벨]\t[메시지]
+    const parts = line.split('\t');
+    if (parts.length < 3) continue;
+
+    const message = parts.slice(2).join('\t').trim(); // 세 번째 컬럼부터 (탭이 메시지 안에 있을 경우 대비)
+    if (!message.startsWith('PART:')) continue;
+
+    // 'PART:' 이후 파싱
+    const body = message.slice(5);          // 예: "meta:{...}" 또는 "popular:AI 기술:[...]"
+    const colonIdx = body.indexOf(':');
+    if (colonIdx === -1) continue;
+
+    const partType = body.slice(0, colonIdx).trim();  // "meta" | "popular" | "all"
+    const rest     = body.slice(colonIdx + 1);         // "{...}" 또는 "AI 기술:[...]"
+
+    try {
+      if (partType === 'meta') {
+        // rest 전체가 JSON 객체
+        const parsed = JSON.parse(rest);
+        Object.assign(result, parsed);
+
+      } else if (partType === 'popular' || partType === 'all') {
+        // rest = "카테고리명:[...]"
+        // 카테고리명에 ':' 가 없다고 보장할 수 없으므로 ':[' 로 분리
+        const bracketIdx = rest.indexOf(':[');
+        if (bracketIdx === -1) {
+          errors.push(`줄 ${i+1}: ':[' 를 찾을 수 없음 (${partType})`);
+          continue;
+        }
+        const catName = rest.slice(0, bracketIdx).trim();
+        const jsonStr = rest.slice(bracketIdx + 1); // '[...]'
+        const parsed  = JSON.parse(jsonStr);
+
+        if (partType === 'popular') result.popularByCat[catName] = parsed;
+        else                        result.allByCat[catName]     = parsed;
+
+      } else {
+        // 알 수 없는 파트 타입은 무시
+      }
+    } catch (e) {
+      errors.push(`줄 ${i+1} [${partType}] JSON 파싱 실패: ${e.message}`);
+    }
+  }
+
+  if (!result.totalContent && !result.categories) {
+    const detail = errors.length ? '\n\n파싱 오류 상세:\n' + errors.join('\n') : '';
+    throw new Error('meta 파트를 찾을 수 없어요. 로그 형식을 확인해주세요.' + detail);
+  }
+
+  if (errors.length) {
+    console.warn('일부 줄 파싱 오류 (무시됨):\n' + errors.join('\n'));
+  }
+
+  return result;
 }
 
 function buildHTML(data) {
   const { totalContent, subscribable, categories, popularByCat, allByCat } = data;
   const COLORS = ["#2563EB","#7C3AED","#059669","#D97706","#DC2626","#0891B2","#9333EA","#16A34A","#EA580C","#0D9488","#7C2D12","#1D4ED8","#6D28D9"];
-  const filteredCats = categories.filter(c => c.name !== "test");
-  const filteredPopular = Object.fromEntries(Object.entries(popularByCat).filter(([k]) => k !== "test"));
-  const filteredAll = allByCat ? Object.fromEntries(Object.entries(allByCat).filter(([k]) => k !== "test")) : {};
+  const filteredCats    = (categories   || []).filter(c => c.name !== "test");
+  const filteredPopular = Object.fromEntries(Object.entries(popularByCat || {}).filter(([k]) => k !== "test"));
+  const filteredAll     = Object.fromEntries(Object.entries(allByCat     || {}).filter(([k]) => k !== "test"));
   const year = new Date().getFullYear();
 
   return `<!DOCTYPE html>
@@ -221,7 +270,7 @@ function buildHTML(data) {
         <div style={{maxWidth:1100,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-              <div style={{width:4,height:24,borderRadius:4,background:"#2563EB"}}\/> 
+              <div style={{width:4,height:24,borderRadius:4,background:"#2563EB"}}/>
               <h1 style={{fontSize:22,fontWeight:700,color:"#0F172A"}}>인프런 콘텐츠 현황<\/h1>
             <\/div>
             <p style={{fontSize:13,color:"#94A3B8",marginLeft:12}}>영업용 콘텐츠 현황 요약 · ${year}<\/p>
@@ -256,7 +305,8 @@ function buildHTML(data) {
               return <div key={i}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{width:10,height:10,borderRadius:"50%",background:color,flexShrink:0}}\/><span style={{fontSize:13,fontWeight:500,color:"#334155"}}>{cat.name}<\/span>
+                    <span style={{width:10,height:10,borderRadius:"50%",background:color,flexShrink:0}}/>
+                    <span style={{fontSize:13,fontWeight:500,color:"#334155"}}>{cat.name}<\/span>
                   <\/div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:11,color:"#94A3B8"}}>{pct}%<\/span>
@@ -265,13 +315,14 @@ function buildHTML(data) {
                   <\/div>
                 <\/div>
                 <div style={{height:8,borderRadius:4,background:"#F1F5F9",overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:4,width:barPct+"%",background:color}}\/>
+                  <div style={{height:"100%",borderRadius:4,width:barPct+"%",background:color}}/>
                 <\/div>
               <\/div>;
             })}
           <\/div>
           <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #F1F5F9",display:"flex",justifyContent:"space-between",fontSize:12,color:"#94A3B8"}}>
-            <span>전체 카테고리 강의 합계<\/span><span style={{fontWeight:600,color:"#334155"}}>{totalCat.toLocaleString()}개<\/span>
+            <span>전체 카테고리 강의 합계<\/span>
+            <span style={{fontWeight:600,color:"#334155"}}>{totalCat.toLocaleString()}개<\/span>
           <\/div>
         <\/div>
         <div style={box({marginBottom:24})}>
@@ -296,7 +347,7 @@ function buildHTML(data) {
                   <p style={{fontSize:13,fontWeight:500,color:"#1F2937",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.title}<\/p>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2,flexWrap:"wrap"}}>
                     <span style={{fontSize:11,padding:"2px 6px",borderRadius:4,background:"#E5E7EB",color:"#6B7280"}}>{String(c.level||"").replace(/[\[\]]/g,"")}<\/span>
-                    <StarRating rating={Number(c.rating)||0}\/>
+                    <StarRating rating={Number(c.rating)||0}/>
                     <span style={{fontSize:11,color:"#94A3B8"}}>수강생 {Number(c.students||0).toLocaleString()}명<\/span>
                   <\/div>
                 <\/div>
@@ -320,7 +371,7 @@ function buildHTML(data) {
             ))}
           <\/div>
           {allCourses.length>0
-            ?<CourseTable key={catTab} catName={catTab} courses={allCourses}\/>
+            ?<CourseTable key={catTab} catName={catTab} courses={allCourses}/>
             :<p style={{textAlign:"center",padding:"40px 0",fontSize:13,color:"#CBD5E1"}}>데이터가 없어요<\/p>}
         <\/div>
         <p style={{textAlign:"center",fontSize:11,color:"#CBD5E1",paddingBottom:32}}>인프런 실데이터 기반 영업용 대시보드<\/p>
@@ -328,7 +379,7 @@ function buildHTML(data) {
     <\/div>;
   }
 
-  ReactDOM.createRoot(document.getElementById('root')).render(<App\/>);
+  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 <\/script>
 </body>
 </html>`;
@@ -347,8 +398,11 @@ async function deploy() {
   try {
     setStatus("⏳ 데이터 파싱 중...", "loading");
     data = parseInput(raw);
+    const catCount = Object.keys(data.popularByCat || {}).length;
+    const allCount = Object.keys(data.allByCat || {}).length;
+    setStatus(`✅ 파싱 완료: 카테고리 ${(data.categories||[]).length}개 · popular ${catCount}개 · all ${allCount}개<br>잠시 후 index.html 생성을 시작합니다...`, "loading");
   } catch(e) {
-    setStatus("❌ JSON 파싱 오류: " + e.message, "error");
+    setStatus("❌ JSON 파싱 오류: " + e.message.replace(/\n/g, "<br>"), "error");
     btn.disabled = false;
     return;
   }
