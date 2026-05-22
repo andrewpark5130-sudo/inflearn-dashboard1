@@ -76,12 +76,18 @@ function setStatus(msg, type) {
 }
 
 function parseInput(raw) {
+  // 줄바꿈 기준으로 각 줄 처리
   let cleaned = raw
-    .replace(/(오전|오후)\s*\d{1,2}:\d{2}:\d{2}\s*(정보|경고|오류|Info|Warning|Error)?\s*/gi, "")
+    // 타임스탬프 줄 전체 제거 (청크 헤더 포함 여부 상관없이)
+    .replace(/(오전|오후)\s*\d{1,2}:\d{2}:\d{2}\s*\t*(정보|경고|오류|Info|Warning|Error)?\s*\t*/gi, "")
+    // 청크 헤더 제거
     .replace(/\[\d+\/\d+\]\s*/g, "")
-    .replace(/^(정보|경고|오류)\s*/gm, "")
+    // 탭 문자 제거
+    .replace(/\t/g, "")
+    // 연속 공백/줄바꿈을 공백 하나로
     .replace(/\s+/g, " ")
     .trim();
+
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   if (start === -1 || end === -1) throw new Error("JSON 데이터를 찾을 수 없어요");
