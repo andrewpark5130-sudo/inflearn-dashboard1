@@ -138,7 +138,7 @@ function buildHTML(data) {
       const catList=cats.map(c=>c.name+"("+c.count+"개)").join(", ");
       const prompt="당신은 인프런 교육 콘텐츠 로드맵 전문가입니다. 아래 조건에 맞는 학습 로드맵을 JSON 형식으로만 반환하세요. 설명이나 마크다운 없이 순수 JSON만 반환하세요.\\n[조건]\\n- 수강 형태: "
         +(mode==="subscribe"
-          ? "구독제 (월정액으로 구독 강의 "+sub+"개 무제한 수강 가능, 예산 제한 없음)"
+          ? "구독제 (월정액으로 구독 강의 "+sub+"개 무제한 수강 가능, 예산 조건 없음)"
           : "구매형 (전체 강의 "+total+"개 활용, 예산: "+(budget?budget+"원":"제한 없음")+")")
         +"\\n- 카테고리: "+catList
         +"\\n- 현재 실력: "+cur+" / 목표 실력: "+tgt+" / 기간: "+(dur||"미정")
