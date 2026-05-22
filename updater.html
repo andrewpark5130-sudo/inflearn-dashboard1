@@ -78,7 +78,7 @@ function setStatus(msg, type) {
 // ─────────────────────────────────────────────
 // parseInput: 로그 형식 → 데이터 객체 변환
 //
-// 지원 형식:
+// 지원 형식 (탭 또는 공백 구분 모두 허용):
 //   오후 3:02:41\t정보\tPART:meta:{...}
 //   오후 3:02:41\t정보\tPART:popular:카테고리명:[...]
 //   오후 3:02:41\t정보\tPART:all:카테고리명:[...]
@@ -87,17 +87,18 @@ function parseInput(raw) {
   const result = { popularByCat: {}, allByCat: {} };
   const errors = [];
 
+  // 타임스탬프+레벨 이후 메시지 추출: 탭이든 공백이든 모두 처리
+  const LOG_RE = /^(?:오전|오후)\s+\d{1,2}:\d{2}:\d{2}[\t ]+(?:정보|오류|경고)[\t ]+(.*)/;
+
   const lines = raw.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
 
-    // '\t정보\t' 또는 '\t오류\t' 등 — 탭으로 구분된 세 번째 컬럼이 메시지
-    // 형식: [타임스탬프]\t[레벨]\t[메시지]
-    const parts = line.split('\t');
-    if (parts.length < 3) continue;
+    const m = line.match(LOG_RE);
+    if (!m) continue;
 
-    const message = parts.slice(2).join('\t').trim(); // 세 번째 컬럼부터 (탭이 메시지 안에 있을 경우 대비)
+    const message = m[1].trim();
     if (!message.startsWith('PART:')) continue;
 
     // 'PART:' 이후 파싱
