@@ -3,111 +3,396 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>인프런 콘텐츠 현황</title>
+  <title>인프런 콘텐츠 현황 · 영업 대시보드</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net"/>
   <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet"/>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    :root {
-      --green: #00C471;
-      --green-light: #E8FAF2;
-      --green-dark: #00A35C;
-      --orange: #FF7D33;
-      --black: #1B1C1E;
-      --gray-800: #3A3B3D;
-      --gray-600: #6B6D72;
-      --gray-400: #ADAEB3;
-      --gray-200: #E0E0E2;
-      --gray-100: #F4F4F5;
-      --gray-50:  #FAFAFA;
-      --white: #FFFFFF;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
+    :root{
+      --green:#00C471; --green-light:#E8FAF2; --green-dark:#00A35C;
+      --orange:#FF7D33; --black:#1B1C1E; --gray-800:#3A3B3D; --gray-600:#6B6D72;
+      --gray-400:#ADAEB3; --gray-200:#E0E0E2; --gray-100:#F4F4F5; --gray-50:#FAFAFA;
+      --white:#FFFFFF; --radius-sm:6px; --radius-md:10px; --radius-lg:14px;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--gray-100);color:var(--black);min-height:100vh;-webkit-font-smoothing:antialiased}
     a{text-decoration:none;color:inherit}
-    ::-webkit-scrollbar{height:4px;width:4px}
+    ::-webkit-scrollbar{height:6px;width:6px}
     ::-webkit-scrollbar-track{background:transparent}
-    ::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
-    .drag-row{cursor:grab;transition:background 0.1s}
-    .drag-row:hover{background:var(--gray-50)}
-    .drag-row.drag-over{background:var(--green-light);box-shadow:inset 0 -2px 0 var(--green)}
+    ::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:3px}
+    .opt-row{cursor:pointer;transition:background .1s}
+    .opt-row:hover{background:var(--gray-50)}
+    .res-row:hover{background:var(--gray-50)}
+    input,select,button{font-family:inherit}
+    .spin{width:34px;height:34px;border:3px solid var(--gray-200);border-top-color:var(--green);border-radius:50%;animation:sp 0.8s linear infinite}
+    @keyframes sp{to{transform:rotate(360deg)}}
   </style>
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel">
-  const { useState, useRef } = React;
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
 
-  const CAT_COLORS = [
-    "#00C471","#FF7D33","#3B82F6","#8B5CF6","#EF4444",
-    "#F59E0B","#10B981","#EC4899","#06B6D4","#6366F1",
-    "#84CC16","#F97316","#14B8A6"
+const CAT_COLORS = ["#00C471","#FF7D33","#3B82F6","#8B5CF6","#EF4444","#F59E0B","#10B981","#EC4899","#06B6D4","#6366F1","#84CC16","#F97316","#14B8A6"];
+
+// ── helpers ───────────────────────────────────────────────
+const nf = n => Number(n||0).toLocaleString();
+const isFree = p => p === "" || p === 0 || p === null || p === undefined;
+const numPrice = p => isFree(p) ? 0 : Number(p)||0;
+
+const FACETS = [
+  {key:"cat1",    label:"대표대분류", arr:false},
+  {key:"cat1Mid", label:"대표중분류", arr:false},
+  {key:"cat2",    label:"대분류",     arr:true},
+  {key:"cat2Mid", label:"중분류",     arr:true},
+  {key:"tags",    label:"기술태그",   arr:true},
+  {key:"level",   label:"레벨",       arr:false},
+];
+
+const s = {
+  section:{background:"var(--white)",borderRadius:"var(--radius-lg)",border:"1px solid var(--gray-200)",padding:"28px 32px",marginBottom:16},
+  sectionTitle:{fontSize:15,fontWeight:700,color:"var(--black)",marginBottom:4,letterSpacing:"-0.2px"},
+  sectionSub:{fontSize:13,color:"var(--gray-400)",marginBottom:20},
+  tag:(active,color)=>({display:"inline-block",padding:"5px 12px",borderRadius:999,fontSize:12,fontWeight:500,cursor:"pointer",border:"none",transition:"all .12s",background:active?color:"var(--gray-100)",color:active?"#fff":"var(--gray-600)"}),
+};
+
+function LevelBadge({level}){
+  const map={"입문":{bg:"#EFF6FF",color:"#3B82F6"},"초급":{bg:"#F0FDF4",color:"#16A34A"},"중급이상":{bg:"#FFF7ED",color:"#EA580C"}};
+  const c=map[level]||{bg:"var(--gray-100)",color:"var(--gray-600)"};
+  if(!level) return null;
+  return <span style={{fontSize:11,fontWeight:500,padding:"2px 7px",borderRadius:4,background:c.bg,color:c.color,whiteSpace:"nowrap"}}>{level}</span>;
+}
+function PriceText({price}){
+  if(isFree(price)) return <span style={{color:"var(--green)",fontWeight:600,fontSize:13}}>무료</span>;
+  return <span style={{color:"var(--black)",fontWeight:600,fontSize:13}}>{nf(price)}원</span>;
+}
+function SubBadge({subscribable}){
+  return subscribable
+    ? <span style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:"var(--green-light)",color:"var(--green-dark)",fontWeight:600}}>구독</span>
+    : <span style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:"var(--gray-100)",color:"var(--gray-400)"}}>구매</span>;
+}
+function StarRating({rating}){
+  const r=Number(rating)||0;
+  if(r<=0) return <span style={{fontSize:11,color:"var(--gray-400)"}}>평점 없음</span>;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:3}}>
+    <span style={{color:"#F59E0B",fontSize:11,letterSpacing:1}}>{"★".repeat(Math.round(r))}{"☆".repeat(5-Math.round(r))}</span>
+    <span style={{fontSize:11,color:"var(--gray-400)",fontWeight:500}}>{r.toFixed(1)}</span>
+  </span>;
+}
+
+// ── KPI ───────────────────────────────────────────────────
+function KPI({courses}){
+  const total=courses.length;
+  const sub=courses.filter(c=>c.subscribable).length;
+  const cats=new Set(courses.map(c=>c.cat1)).size;
+  const cards=[
+    {label:"전체 강의",value:nf(total),unit:"개",desc:"총 보유 콘텐츠"},
+    {label:"구독 가능",value:nf(sub),unit:"개",desc:`전체의 ${total?Math.round(sub/total*100):0}%`},
+    {label:"대표대분류",value:cats,unit:"개",desc:"운영 중인 분야"},
   ];
+  return <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
+    {cards.map((k,i)=>(
+      <div key={i} style={{background:"var(--white)",borderRadius:"var(--radius-lg)",border:"1px solid var(--gray-200)",padding:"24px 28px"}}>
+        <p style={{fontSize:12,color:"var(--gray-400)",marginBottom:12,fontWeight:500}}>{k.label}</p>
+        <p style={{fontSize:32,fontWeight:800,letterSpacing:"-1px",lineHeight:1}}>{k.value}<span style={{fontSize:16,fontWeight:600,color:"var(--gray-400)",marginLeft:4}}>{k.unit}</span></p>
+        <p style={{fontSize:11,color:"var(--gray-400)",marginTop:8}}>{k.desc}</p>
+      </div>
+    ))}
+  </div>;
+}
 
-  const DATA = {"totalContent":5826,"subscribable":2526,"categories":[{"name":"개발 · 프로그래밍","count":2104},{"name":"커리어 · 자기계발","count":521},{"name":"기획 · 경영 · 마케팅","count":457},{"name":"디자인 · 아트","count":447},{"name":"데이터 사이언스","count":376},{"name":"보안 · 네트워크","count":344},{"name":"업무 생산성","count":336},{"name":"AI 기술","count":330},{"name":"게임 개발","count":286},{"name":"AI 활용(AX)","count":260},{"name":"하드웨어","count":139},{"name":"대학 교육","count":121},{"name":"외국어","count":105}],"popular":{"AI 활용(AX)":[{"title":"[바이브 코딩 입문 강의] 혼자 공부하는 바이브 코딩 with 클로드 코드","link":"https://www.inflearn.com/course/바이브-코딩-입문-강의-혼자-공부하는","level":"[입문]","students":6915,"rating":4.9,"price":""},{"title":"업무 자동화, 내 업무에 AI를 도입하는 방법 [인프런 어워드 수상, AX]","link":"https://www.inflearn.com/course/ai-모르던-동기도-몰래-배우는-x2","level":"[입문]","students":4585,"rating":4.8,"price":49500},{"title":"[인프런어워드 베스트셀러] 코딩 없이 AI 자동화 전문가가 되는 법, n8n 완벽 가이드","link":"https://www.inflearn.com/course/ai-자동화-n8n","level":"[입문]","students":3208,"rating":4.8,"price":68200},{"title":"[1시간 완성] AI로 4.5점(A+) 만드는 공부법","link":"https://www.inflearn.com/course/1주-완성-ai로-45a-만드는-공부","level":"[입문]","students":3095,"rating":4.7,"price":19800},{"title":"[인프런어워드 수상기념]본인의 경험으로 AI를 통해 수익화 하는 방법","link":"https://www.inflearn.com/course/ai시대-돈버는-사람은-따로있다-ai","level":"[입문]","students":3015,"rating":4.7,"price":33000}],"데이터 사이언스":[{"title":"공공 데이터 (오픈 데이터) API 제대로 배우기 Part.1","link":"https://www.inflearn.com/course/공공데이터-api-1","level":"[초급]","students":63062,"rating":4.8,"price":52800},{"title":"공공 데이터 (오픈 데이터) API 제대로 배우기 Part.2","link":"https://www.inflearn.com/course/공공데이터-api-2","level":"[초급]","students":41564,"rating":4.6,"price":41800},{"title":"금융데이터 분석을 위한 판다스 활용법","link":"https://www.inflearn.com/course/금융데이터-판다스-활용","level":"[초급]","students":27776,"rating":4.7,"price":55000},{"title":"SQL 개발자 (SQLD) 자격증 따기 Part.1","link":"https://www.inflearn.com/course/sqld-자격증-초급-1","level":"[초급]","students":27717,"rating":4,"price":33000},{"title":"SQL 개발자 (SQLD) 자격증 따기 Part.2","link":"https://www.inflearn.com/course/sqld-자격증-초급-2","level":"[초급]","students":22930,"rating":4,"price":55000}],"보안 · 네트워크":[{"title":"운영체제 공룡책 강의","link":"https://www.inflearn.com/course/운영체제-공룡책-전공강의","level":"[중급이상]","students":18512,"rating":4.9,"price":""},{"title":"생활코딩 - Linux","link":"https://www.inflearn.com/course/생활코딩-리눅스-강좌","level":"[초급]","students":17709,"rating":4.9,"price":""},{"title":"이것이 리눅스다' 저자의 Red Hat CentOS7 리눅스 서버&네트워크 강좌","link":"https://www.inflearn.com/course/이것이-리눅스다","level":"[초급]","students":14288,"rating":4.8,"price":""},{"title":"외워서 끝내는 네트워크 핵심이론 - 기초","link":"https://www.inflearn.com/course/네트워크-핵심이론-기초","level":"[입문]","students":8416,"rating":4.9,"price":77000},{"title":"정보보안 전문가란? 무엇을 하고 어떻게 준비해야 할까.","link":"https://www.inflearn.com/course/정보보안-전문가","level":"[입문]","students":8180,"rating":4.8,"price":""}],"AI 기술":[{"title":"머신러닝 처음 시작하기 (기초 원리 + 초급 실습)","link":"https://www.inflearn.com/course/머신러닝-처음-시작하기","level":"[초급]","students":86143,"rating":4.1,"price":30800},{"title":"모두를 위한 딥러닝 - 기본적인 머신러닝과 딥러닝 강좌","link":"https://www.inflearn.com/course/기본적인-머신러닝-딥러닝-강좌","level":"[초급]","students":28093,"rating":4.9,"price":""},{"title":"모두를 위한 딥러닝 - Deep Reinforcement Learning","link":"https://www.inflearn.com/course/reinforcement-learning","level":"[중급이상]","students":10991,"rating":5,"price":""},{"title":"머신러닝 이론 및 파이썬 실습","link":"https://www.inflearn.com/course/머신러닝이론-파이썬실습","level":"[초급]","students":10921,"rating":4.7,"price":""},{"title":"혼자 공부하는 머신러닝+딥러닝","link":"https://www.inflearn.com/course/혼자공부-머신러닝-딥러닝","level":"[초급]","students":9027,"rating":4.8,"price":""}],"대학 교육":[{"title":"선형대수학개론","link":"https://www.inflearn.com/course/선형대수학개론","level":"[초급]","students":2866,"rating":4.7,"price":77000},{"title":"스크래치 코딩으로 배우는 수학의 개념과 원리","link":"https://www.inflearn.com/course/스크래치","level":"[입문]","students":1798,"rating":4.9,"price":""},{"title":"수학으로부터 인류를 자유롭게 하라(기초대수학편)","link":"https://www.inflearn.com/course/기초-대수학-중고등","level":"[입문]","students":1053,"rating":4.9,"price":44000},{"title":"벡터 미적분학 시리즈1 - 미분 기초","link":"https://www.inflearn.com/course/벡터미적분학기초1","level":"[초급]","students":918,"rating":4.5,"price":44000},{"title":"파이썬을 활용한 선형대수학 - NumPy와 SciPy의 활용","link":"https://www.inflearn.com/course/선형대수학","level":"[초급]","students":773,"rating":5,"price":55000}],"디자인 · 아트":[{"title":"효과적인 모바일 UX 만들기 (디자인 + 코딩)","link":"https://www.inflearn.com/course/모바일-ux-디자인-코딩","level":"[초급]","students":106961,"rating":4.5,"price":79200},{"title":"왕초보를 위한 Adobe Photoshop CC 2019 입문자 가이드","link":"https://www.inflearn.com/course/왕초보-포토샵-입문","level":"[입문]","students":101167,"rating":4.7,"price":108900},{"title":"Adobe Premiere Pro CC 2018, 2019 영상편집의 입문 Part.1","link":"https://www.inflearn.com/course/프리미어-입문-1","level":"[초급]","students":94010,"rating":4.8,"price":77000},{"title":"After Effects CC 모션 이펙트의 활용","link":"https://www.inflearn.com/course/애프터이펙트-모션이펙트","level":"[초급]","students":91701,"rating":4.9,"price":35200},{"title":"Adobe Premiere Pro CC 2018, 2019 영상편집의 입문 Part.2","link":"https://www.inflearn.com/course/프리미어-입문-2","level":"[초급]","students":90946,"rating":4.6,"price":70400}],"기획 · 경영 · 마케팅":[{"title":"노션(Notion) 데이터베이스 - 입문편","link":"https://www.inflearn.com/course/노션-데이터베이스-입문","level":"[입문]","students":66976,"rating":4,"price":30800},{"title":"노션(Notion) 데이터베이스 - 고급편","link":"https://www.inflearn.com/course/노션-데이터베이스-고급","level":"[초급]","students":66816,"rating":4.2,"price":44000},{"title":"노션(Notion) 데이터베이스 - 중급편","link":"https://www.inflearn.com/course/노션-데이터베이스-중급","level":"[초급]","students":63782,"rating":3.9,"price":41800},{"title":"노션(notion) 완벽 활용법","link":"https://www.inflearn.com/course/노션-notion-활용","level":"[입문]","students":41229,"rating":4.8,"price":""},{"title":"전산회계 2급 자격증 따기 2022 (이론)","link":"https://www.inflearn.com/course/전산회계-2급-2022-이론","level":"[입문]","students":13024,"rating":4.8,"price":48400}],"커리어 · 자기계발":[{"title":"컴퓨터활용능력 1,2급 필기 - 컴퓨터 일반","link":"https://www.inflearn.com/course/컴활-필기-컴퓨터일반","level":"[입문]","students":74408,"rating":4.5,"price":33000},{"title":"언택트창업 쿠팡으로 돈벌기 Part.1 마켓플레이스","link":"https://www.inflearn.com/course/언택트창업-마켓플레이스","level":"[입문]","students":40088,"rating":4.8,"price":29700},{"title":"언택트창업 쿠팡으로 돈벌기 Part.2 제휴마케팅(파트너스)","link":"https://www.inflearn.com/course/언택트창업-제휴마케팅","level":"[입문]","students":39642,"rating":4.7,"price":20900},{"title":"Amazon(아마존) 글로벌 셀러되기","link":"https://www.inflearn.com/course/아마존-셀러되기","level":"[입문]","students":37546,"rating":4.3,"price":17600},{"title":"파이썬 주식 매매 봇으로 주식시장 자동사냥하기","link":"https://www.inflearn.com/course/파이썬-주식매매봇-자동사냥","level":"[초급]","students":5180,"rating":4.8,"price":86900}],"개발 · 프로그래밍":[{"title":"예제로 공부하는 Python 100 문제풀이 Part.2","link":"https://www.inflearn.com/course/파이썬-100제-2","level":"[초급]","students":126300,"rating":4.8,"price":49500},{"title":"스프링 입문 - 코드로 배우는 스프링 부트, 웹 MVC, DB 접근 기술","link":"https://www.inflearn.com/course/스프링-입문-스프링부트","level":"[초급]","students":121891,"rating":5,"price":""},{"title":"예제로 공부하는 Python 100 문제풀이 Part.3","link":"https://www.inflearn.com/course/파이썬-100제-3","level":"[초급]","students":110274,"rating":4.9,"price":49500},{"title":"예제로 공부하는 Python 100 문제풀이 Part.1","link":"https://www.inflearn.com/course/파이썬-100제-1","level":"[입문]","students":109680,"rating":4.7,"price":49500},{"title":"자바스크립트+jQuery 기초부터 실무까지 : 기초 Part.1","link":"https://www.inflearn.com/course/자바스크립트-제이쿼리-기초-1","level":"[입문]","students":107694,"rating":4.8,"price":34100}],"게임 개발":[{"title":"유니티 기초 강좌 - 기획부터 사용까지","link":"https://www.inflearn.com/course/유니티-기초-강좌-기획부터-사용까지-2","level":"[입문]","students":13360,"rating":4.6,"price":""},{"title":"따라하면서 배우는 고박사의 유니티 기초","link":"https://www.inflearn.com/course/고박사-유니티-기초","level":"[입문]","students":11604,"rating":4.9,"price":""},{"title":"파이썬 무료 강의 (활용편1) - 추억의 오락실 게임 만들기 (3시간)","link":"https://www.inflearn.com/course/나도코딩-파이썬-활용편-1","level":"[초급]","students":8538,"rating":4.9,"price":""},{"title":"유니티 2D 로그라이크 게임 만들기 [한글자막]","link":"https://www.inflearn.com/course/유니티-3d-게임-만들기","level":"[초급]","students":7468,"rating":4.7,"price":""},{"title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part1: C# 기초 프로그래밍 입문","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-part1","level":"[입문]","students":7244,"rating":4.9,"price":44000}],"외국어":[{"title":"하루만에 오픽 IH 달성하기","link":"https://www.inflearn.com/course/오픽-ih-하루완성","level":"[입문]","students":5603,"rating":4.9,"price":22000},{"title":"웃으며 배우는 생활일본어","link":"https://www.inflearn.com/course/생활일본어-초급","level":"[초급]","students":4048,"rating":4.8,"price":""},{"title":"한시간만에 끝내는 영어 : 시드니개발자의 영어PT","link":"https://www.inflearn.com/course/한달-문법이해-개발자-영어","level":"[입문]","students":2152,"rating":4.9,"price":220000},{"title":"단어로 배우는 중국어 회화!","link":"https://www.inflearn.com/course/단어로-배우는-중국어-회화","level":"[입문]","students":1229,"rating":5,"price":9900},{"title":"스피킹 강자로 만들어주는 만능 영어회화패턴 12가지","link":"https://www.inflearn.com/course/만능영어회화패턴","level":"[초급]","students":609,"rating":4.8,"price":29700}],"업무 생산성":[{"title":"Tip으로 배우는 엑셀(Excel)","link":"https://www.inflearn.com/course/팁으로-배우는-엑셀","level":"[초급]","students":120087,"rating":4.8,"price":22000},{"title":"실무로 배우는 엑셀(Excel) 2019","link":"https://www.inflearn.com/course/실무로-배우는-엑셀-2019","level":"[초급]","students":101306,"rating":4.7,"price":18700},{"title":"한글(한컴오피스) 제대로 배우기","link":"https://www.inflearn.com/course/한글-오피스-배우기","level":"[입문]","students":71784,"rating":4.5,"price":35200},{"title":"MOS Excel Expert 2016 자격증 따기","link":"https://www.inflearn.com/course/mos-excel-expert-2016","level":"[초급]","students":65433,"rating":5,"price":39600},{"title":"MOS Excel Core 2016 자격증 따기","link":"https://www.inflearn.com/course/mos-excel-core-2016","level":"[입문]","students":65026,"rating":4.4,"price":35200}],"하드웨어":[{"title":"컴알못이 보는 컴퓨터 하드웨어 기초상식","link":"https://www.inflearn.com/course/컴퓨터-하드웨어-기초상식","level":"[입문]","students":7007,"rating":4.8,"price":""},{"title":"아두이노 강좌","link":"https://www.inflearn.com/course/아두이노-강좌","level":"[입문]","students":4159,"rating":4.8,"price":""},{"title":"HAL, CubeMX, TrueSTUDIO를 이용한 STM32F4 무료 강좌","link":"https://www.inflearn.com/course/stm32f4","level":"[초급]","students":3540,"rating":5,"price":""},{"title":"제품부터 시작하는 인우의 반도체 CHIP 회로설계 이야기","link":"https://www.inflearn.com/course/제품부터-시작하는-반도체-회로설계","level":"[초급]","students":3197,"rating":4.9,"price":""},{"title":"라즈베리파이 IoT 프로그램과 클라우드 입문 과정","link":"https://www.inflearn.com/course/라즈베리파이-iot-입문","level":"[초급]","students":2816,"rating":4.7,"price":""}]},"allByCat":{"AI 활용(AX)":[{"id":"340120","title":"[바이브 코딩 입문 강의] 혼자 공부하는 바이브 코딩 with 클로드 코드","instructor":"한빛미디어","link":"https://www.inflearn.com/course/바이브-코딩-입문-강의-혼자-공부하는","level":"[입문]","students":6915,"price":"","subscribable":false},{"id":"338950","title":"업무 자동화, 내 업무에 AI를 도입하는 방법 [인프런 어워드 수상, AX]","instructor":"Slearnic AI LAB","link":"https://www.inflearn.com/course/ai-모르던-동기도-몰래-배우는-x2","level":"[입문]","students":4585,"price":49500,"subscribable":true},{"id":"337053","title":"[인프런어워드 베스트셀러] 코딩 없이 AI 자동화 전문가가 되는 법, n8n 완벽 가이드","instructor":"남박사","link":"https://www.inflearn.com/course/ai-자동화-n8n","level":"[입문]","students":3208,"price":68200,"subscribable":true},{"id":"339360","title":"[1시간 완성] AI로 4.5점(A+) 만드는 공부법","instructor":"AI 지식 전달자","link":"https://www.inflearn.com/course/1주-완성-ai로-45a-만드는-공부","level":"[입문]","students":3095,"price":19800,"subscribable":true},{"id":"337912","title":"[인프런어워드 수상기념]본인의 경험으로 AI를 통해 수익화 하는 방법","instructor":"Slearnic AI LAB","link":"https://www.inflearn.com/course/ai시대-돈버는-사람은-따로있다-ai","level":"[입문]","students":3015,"price":33000,"subscribable":false},{"id":"339694","title":"[바이브코딩] Google AntiGravity 마스터 클래스 - Basic","instructor":"AI 지식 전달자","link":"https://www.inflearn.com/course/바이브코딩-google-antigra","level":"[입문]","students":2447,"price":"","subscribable":false},{"id":"336097","title":"[연재형] WE CAN ChatGPT! - 챗gpt 우리도 할 수 있습니다.","instructor":"이프로","link":"https://www.inflearn.com/course/we-can-chatgpt","level":"[입문]","students":2183,"price":"","subscribable":false},{"id":"338119","title":"비개발자 4주만에 수익화 서비스 만들기: AI 바이브코딩 웹 + 앱 ALL IN ONE","instructor":"딩코딩코","link":"https://www.inflearn.com/course/비개발자-4주만에-수익화-서비스-만들","level":"[입문]","students":1794,"price":165000,"subscribable":true},{"id":"338946","title":"JetBrains와 Nebius가 함께하는 AI 기반 프로그래밍 강의 시리즈","instructor":"JetBrains","link":"https://www.inflearn.com/course/ai-활용-프로그래밍-강의-시리즈","level":"[입문]","students":1552,"price":"","subscribable":false},{"id":"337584","title":"일 잘하는 직장인의 비밀: Microsoft 365 Copilot 완전 정복","instructor":"한국마이크로소프트","link":"https://www.inflearn.com/course/일-잘하는-직장인의-비밀-micros","level":"[입문]","students":1460,"price":"","subscribable":false},{"id":"339693","title":"바로 쓰는 제미나이 활용법 - 제미나이 강사 권서림","instructor":"제미나이 강사 권서림","link":"https://www.inflearn.com/course/된다-하루-만에-끝내는-제미나이-활용","level":"[입문]","students":1433,"price":"","subscribable":false},{"id":"334732","title":"업무에 바로 적용하는 텍스트 생성AI 활용법: 챗GPT 마스터클래스","instructor":"국립안동대학교 SW융합교육원","link":"https://www.inflearn.com/course/업무에-바로적용-텍스트-생성ai-활용법","level":"[입문]","students":1353,"price":"","subscribable":false},{"id":"330858","title":"(2026 개정판)ChatGPT 활용법, 생성 AI 프롬프트 엔지니어링 A to Z - 인공지능의 이해와 활용","instructor":"Masocampus","link":"https://www.inflearn.com/course/chatgpt활용법-프롬프트엔지니어링-인공지능","level":"[입문]","students":1235,"price":49500,"subscribable":true},{"id":"331254","title":"(2026 개정판) ChatGPT 고급 활용법 – 남들보다 100배 더 잘 쓰는 ChatGPT 비법 클래스","instructor":"Masocampus","link":"https://www.inflearn.com/course/chatgpt-고급-활용법","level":"[입문]","students":1225,"price":119900,"subscribable":true},{"id":"338906","title":"[무료] Notion MCP: 입문에서 활용까지","instructor":"닭강정","link":"https://www.inflearn.com/course/무료-notion-mcp-입문에서-활","level":"[입문]","students":1095,"price":"","subscribable":false},{"id":"341870","title":"AI 처음으로 일 시키기 — Claude Code 에이전틱 자동화","instructor":"FlowCoder","link":"https://www.inflearn.com/course/giving-ai-its-first","level":"[입문]","students":1002,"price":"","subscribable":false},{"id":"335917","title":"생성형AI 특성과 PPT 제작","instructor":"경영회계사무 인적자원개발위원회","link":"https://www.inflearn.com/course/생성형ai-ppt-제작","level":"[입문]","students":997,"price":"","subscribable":false},{"id":"339209","title":"원클릭으로 AI가 생성해주는 Youtube 쇼츠 만들기 자동화(with n8n)","instructor":"밤낮 코딩","link":"https://www.inflearn.com/course/원클릭으로-ai가-생성해주는-yout","level":"[입문]","students":953,"price":132000,"subscribable":true},{"id":"333680","title":"내 일상에 ChatGPT는 어떻게 활용되는가?","instructor":"태림 스튜디오","link":"https://www.inflearn.com/course/chatgpt-일상-활용","level":"[입문]","students":918,"price":"","subscribable":false},{"id":"338674","title":"(GPT-5) 챗GPT와 파이썬으로 주식 자동매매 앱 및 웹 투자 리포트 만들기","instructor":"박가네 데이터랩","link":"https://www.inflearn.com/course/gpt-5-챗gpt와-파이썬으로-주식","level":"[초급]","students":910,"price":37400,"subscribable":true}],"데이터 사이언스":[{"id":"328269","title":"공공 데이터 (오픈 데이터) API 제대로 배우기 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/공공데이터-api-1","level":"[초급]","students":63062,"price":52800,"subscribable":true},{"id":"328270","title":"공공 데이터 (오픈 데이터) API 제대로 배우기 Part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/공공데이터-api-2","level":"[초급]","students":41564,"price":41800,"subscribable":true},{"id":"328179","title":"금융데이터 분석을 위한 판다스 활용법","instructor":"인프런","link":"https://www.inflearn.com/course/금융데이터-판다스-활용","level":"[초급]","students":27776,"price":55000,"subscribable":true},{"id":"328354","title":"SQL 개발자 (SQLD) 자격증 따기 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/sqld-자격증-초급-1","level":"[초급]","students":27717,"price":33000,"subscribable":true},{"id":"328364","title":"SQL 개발자 (SQLD) 자격증 따기 Part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/sqld-자격증-초급-2","level":"[초급]","students":22930,"price":55000,"subscribable":true},{"id":"328853","title":"SQL 개발자 (SQLD) 자격증 따기 Part.3","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/sqld-자격증-초급-3","level":"[초급]","students":22658,"price":27500,"subscribable":true},{"id":"328857","title":"SQL 개발자 (SQLD) 자격증 따기 Part.4","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/sqld-자격증-초급-4","level":"[초급]","students":22481,"price":27500,"subscribable":true},{"id":"37069","title":"ELK 스택 (ElasticSearch, Logstash, Kibana) 으로 데이터 분석","instructor":"Minsuk Heo","link":"https://www.inflearn.com/course/elk-스택-데이터-분석","level":"[초급]","students":14457,"price":"","subscribable":false},{"id":"327774","title":"[신규 개정판] 이것이 진짜 크롤링이다 - 기본편","instructor":"스타트코딩","link":"https://www.inflearn.com/course/파이썬-크롤링-기초","level":"[초급]","students":13668,"price":"","subscribable":false},{"id":"326507","title":"[데브원영] 아파치 카프카 for beginners","instructor":"데브원영 DVWY","link":"https://www.inflearn.com/course/아파치-카프카-입문","level":"[초급]","students":10489,"price":"","subscribable":false},{"id":"333176","title":"초보자를 위한 BigQuery(SQL) 입문","instructor":"카일스쿨","link":"https://www.inflearn.com/course/초보자를-위한-빅쿼리-sql-입문","level":"[초급]","students":8653,"price":"","subscribable":false},{"id":"324082","title":"[리뉴얼] 파이썬입문과 크롤링기초 부트캠프 [파이썬, 웹, 데이터 이해 기본까지] (업데이트)","instructor":"잔재미코딩 DaveLee","link":"https://www.inflearn.com/course/python-crawling-basic","level":"[입문]","students":7542,"price":77000,"subscribable":true},{"id":"133534","title":"Pandas 팬더스 데이터분석 기초 실습","instructor":"Minsuk Heo","link":"https://www.inflearn.com/course/pandas-팬더스-데이터분석-기초","level":"[초급]","students":7499,"price":"","subscribable":false},{"id":"324067","title":"파이썬으로 영화 예매 오픈 알리미 만들기","instructor":"한승우","link":"https://www.inflearn.com/course/영화예매-파이썬","level":"[초급]","students":7360,"price":"","subscribable":false},{"id":"324453","title":"웰컴 투 태블로 월드","instructor":"VizLab","link":"https://www.inflearn.com/course/태블로강좌-1","level":"[초급]","students":6876,"price":"","subscribable":false},{"id":"286688","title":"공공데이터로 파이썬 데이터 분석 시작하기","instructor":"박조은","link":"https://www.inflearn.com/course/공공데이터로-파이썬-데이터-분석-시작하기","level":"[초급]","students":6394,"price":66000,"subscribable":true},{"id":"324566","title":"[백문이불여일타] 데이터 분석을 위한 기초 SQL","instructor":"데이터리안","link":"https://www.inflearn.com/course/백문이불여일타-데이터-분석-기초-sql","level":"[입문]","students":6311,"price":16500,"subscribable":true},{"id":"326271","title":"파이썬 무료 강의 (활용편3) - 웹 스크래핑 (5시간)","instructor":"나도코딩","link":"https://www.inflearn.com/course/파이썬-웹-스크래핑","level":"[초급]","students":5689,"price":"","subscribable":false},{"id":"329972","title":"[퇴근후딴짓] 빅데이터 분석기사 실기 (작업형1,2,3)","instructor":"퇴근후딴짓","link":"https://www.inflearn.com/course/빅데이터-분석기사-실기","level":"[입문]","students":5608,"price":121000,"subscribable":false},{"id":"324568","title":"[백문이불여일타] 데이터 분석을 위한 중급 SQL","instructor":"데이터리안","link":"https://www.inflearn.com/course/데이터-분석-중급-sql","level":"[초급]","students":5599,"price":38500,"subscribable":true}],"보안 · 네트워크":[{"id":"326346","title":"운영체제 공룡책 강의","instructor":"주니온","link":"https://www.inflearn.com/course/운영체제-공룡책-전공강의","level":"[중급이상]","students":18512,"price":"","subscribable":false},{"id":"36950","title":"생활코딩 - Linux","instructor":"Egoing Lee","link":"https://www.inflearn.com/course/생활코딩-리눅스-강좌","level":"[초급]","students":17709,"price":"","subscribable":false},{"id":"21946","title":"이것이 리눅스다' 저자의 Red Hat CentOS7 리눅스 서버&네트워크 강좌","instructor":"한빛미디어","link":"https://www.inflearn.com/course/이것이-리눅스다","level":"[초급]","students":14288,"price":"","subscribable":false},{"id":"329534","title":"외워서 끝내는 네트워크 핵심이론 - 기초","instructor":"널널한 개발자","link":"https://www.inflearn.com/course/네트워크-핵심이론-기초","level":"[입문]","students":8416,"price":77000,"subscribable":false},{"id":"41183","title":"정보보안 전문가란? 무엇을 하고 어떻게 준비해야 할까.","instructor":"보안프로젝트","link":"https://www.inflearn.com/course/정보보안-전문가","level":"[입문]","students":8180,"price":"","subscribable":false},{"id":"324137","title":"IT보안을 위한 와이어샤크 네트워크 패킷 분석 실전","instructor":"보안프로젝트","link":"https://www.inflearn.com/course/wireshark_boanproject","level":"[초급]","students":7860,"price":33000,"subscribable":false},{"id":"134573","title":"화이트해커가 되기 위한 8가지 웹 해킹 기술","instructor":"시큐아카데미","link":"https://www.inflearn.com/course/화이트해커가-되기위한-8가지","level":"[초급]","students":7704,"price":"","subscribable":false},{"id":"318646","title":"Klaytn 클레이튼 블록체인 어플리케이션 만들기 - 이론과 실습","instructor":"SEJONG IT EDU","link":"https://www.inflearn.com/course/클레이튼","level":"[초급]","students":7421,"price":"","subscribable":false},{"id":"324577","title":"성공적인 SQL 인젝션 공격을 위한, SQL 기본 문법","instructor":"크리핵티브","link":"https://www.inflearn.com/course/SQL-인젝션-공격-기본-문법","level":"[초급]","students":6382,"price":"","subscribable":false},{"id":"286212","title":"정보보안 및 개인정보보호 특강","instructor":"장용하","link":"https://www.inflearn.com/course/정보보안-및-개인정보보호","level":"[입문]","students":6061,"price":"","subscribable":false},{"id":"328431","title":"기초부터 따라하는 디지털포렌식","instructor":"훈지손","link":"https://www.inflearn.com/course/기초-디지털-포렌식","level":"[입문]","students":5919,"price":"","subscribable":false},{"id":"335940","title":"개발자를 위한 컴퓨터공학 2: 혼자 공부하는 네트워크","instructor":"강민철","link":"https://www.inflearn.com/course/개발자-컴퓨터공학-혼자공부하는-네트워크","level":"[입문]","students":5467,"price":"","subscribable":false},{"id":"22152","title":"뇌를 자극하는 윈도우즈 시스템 프로그래밍","instructor":"한빛미디어","link":"https://www.inflearn.com/course/시스템-프로그래밍","level":"[초급]","students":5251,"price":"","subscribable":false},{"id":"150560","title":"블록체인과 솔리디티","instructor":"아일","link":"https://www.inflearn.com/course/블록체인-blockchain","level":"[초급]","students":5170,"price":"","subscribable":false},{"id":"333415","title":"개발자를 위한 쉬운 리눅스","instructor":"황현우","link":"https://www.inflearn.com/course/개발자를-위한-쉬운-리눅스","level":"[입문]","students":4931,"price":"","subscribable":false},{"id":"324072","title":"웹 서비스 해킹을 위한 버프스위트 완벽 활용 가이드","instructor":"보안프로젝트","link":"https://www.inflearn.com/course/boan_burpsuite","level":"[입문]","students":4919,"price":"","subscribable":false},{"id":"329541","title":"외워서 끝내는 네트워크 핵심이론 - 응용","instructor":"널널한 개발자","link":"https://www.inflearn.com/course/네트워크-핵심이론-응용","level":"[중급이상]","students":4801,"price":66000,"subscribable":false},{"id":"331817","title":"네이버, 카카오 임직원들이 듣고 있는 비트코인 강의","instructor":"대니월드","link":"https://www.inflearn.com/course/비트코인-백서-이해","level":"[입문]","students":4643,"price":19800,"subscribable":true},{"id":"324552","title":"웹 해킹과 모의해킹 현업에 대한 이야기","instructor":"크리핵티브","link":"https://www.inflearn.com/course/web-hacking-모의-해킹","level":"[입문]","students":4447,"price":"","subscribable":false},{"id":"44932","title":"모의해킹 업무의 이해","instructor":"보안프로젝트","link":"https://www.inflearn.com/course/보안-모의해킹-업무","level":"[입문]","students":4383,"price":"","subscribable":false}],"AI 기술":[{"id":"325031","title":"머신러닝 처음 시작하기 (기초 원리 + 초급 실습)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/머신러닝-처음-시작하기","level":"[초급]","students":86143,"price":30800,"subscribable":true},{"id":"29707","title":"모두를 위한 딥러닝 - 기본적인 머신러닝과 딥러닝 강좌","instructor":"Sung Kim","link":"https://www.inflearn.com/course/기본적인-머신러닝-딥러닝-강좌","level":"[초급]","students":28093,"price":"","subscribable":false},{"id":"38407","title":"모두를 위한 딥러닝 - Deep Reinforcement Learning","instructor":"Sung Kim","link":"https://www.inflearn.com/course/reinforcement-learning","level":"[중급이상]","students":10991,"price":"","subscribable":false},{"id":"101573","title":"머신러닝 이론 및 파이썬 실습","instructor":"Minsuk Heo","link":"https://www.inflearn.com/course/머신러닝이론-파이썬실습","level":"[초급]","students":10921,"price":"","subscribable":false},{"id":"326639","title":"혼자 공부하는 머신러닝+딥러닝","instructor":"박해선","link":"https://www.inflearn.com/course/혼자공부-머신러닝-딥러닝","level":"[초급]","students":9027,"price":"","subscribable":false},{"id":"47007","title":"OpenCV 강좌 - 컴퓨터 비전","instructor":"Jeonghyun Kim","link":"https://www.inflearn.com/course/opencv-lecture","level":"[초급]","students":8887,"price":"","subscribable":false},{"id":"324238","title":"[개정판] 파이썬 머신러닝 완벽 가이드","instructor":"권 철민","link":"https://www.inflearn.com/course/파이썬-머신러닝-완벽가이드","level":"[초급]","students":8705,"price":99000,"subscribable":false},{"id":"339317","title":"클로드 코드 완벽 마스터: AI 개발 워크플로우 기초부터 실전까지","instructor":"짐코딩","link":"https://www.inflearn.com/course/클로드-코드-완벽-마스터-ai-개발","level":"[입문]","students":8126,"price":198000,"subscribable":false},{"id":"335103","title":"AI 에이전트로 구현하는 RAG 시스템(w. LangGraph)","instructor":"판다스 스튜디오","link":"https://www.inflearn.com/course/ai에이전트-구현-rag시스템-랭그래프","level":"[초급]","students":7910,"price":99000,"subscribable":false},{"id":"325478","title":"핸즈온 머신러닝 2","instructor":"박해선","link":"https://www.inflearn.com/course/핸즈온-머신러닝","level":"[초급]","students":6682,"price":"","subscribable":false},{"id":"337281","title":"회사에서 바로 쓰는 업무자동화 AI 에이전트 (w. n8n, LangGraph)","instructor":"제이쓴","link":"https://www.inflearn.com/course/회사에서-바로쓰는-업무자동화-ai에이전트","level":"[초급]","students":6474,"price":79200,"subscribable":true},{"id":"333326","title":"입문자를 위한 LangChain 기초 — v1.0+ 업데이트","instructor":"판다스 스튜디오","link":"https://www.inflearn.com/course/입문자를위한-랭체인-기초","level":"[초급]","students":6112,"price":"","subscribable":false},{"id":"327610","title":"파이썬 기초 라이브러리부터 쌓아가는 머신러닝","instructor":"거친코딩","link":"https://www.inflearn.com/course/파이썬-머신러닝","level":"[초급]","students":5691,"price":"","subscribable":false},{"id":"326367","title":"Do It! 딥러닝 입문","instructor":"박해선","link":"https://www.inflearn.com/course/딥러닝-입문","level":"[초급]","students":4955,"price":"","subscribable":false},{"id":"333796","title":"RAG를 활용한 LLM Application 개발 (feat. LangChain)","instructor":"제이쓴","link":"https://www.inflearn.com/course/rag-llm-application개발-langchain","level":"[초급]","students":4476,"price":66000,"subscribable":true},{"id":"325035","title":"[개정판] 딥러닝 컴퓨터 비전 완벽 가이드","instructor":"권 철민","link":"https://www.inflearn.com/course/딥러닝-컴퓨터비전-완벽가이드","level":"[중급이상]","students":4059,"price":121000,"subscribable":false},{"id":"324116","title":"인공지능 R GO! 하자!","instructor":"이수화","link":"https://www.inflearn.com/course/python-r-go","level":"[중급이상]","students":2873,"price":"","subscribable":false},{"id":"204939","title":"강화학습 기초 이론","instructor":"팡요랩","link":"https://www.inflearn.com/course/강화학습","level":"[중급이상]","students":2713,"price":"","subscribable":false},{"id":"327034","title":"[입문자를 위한] 캐글로 시작하는 머신러닝 • 딥러닝 분석","instructor":"대구빅데이터활용센터","link":"https://www.inflearn.com/course/캐글-머신러닝-딥러닝","level":"[초급]","students":2690,"price":"","subscribable":false},{"id":"327104","title":"30분 요약 강좌 시즌3 : 초급자를 위한 손에 잡히는 딥러닝!","instructor":"제주코딩베이스캠프","link":"https://www.inflearn.com/course/30분-시즌3-초급-딥러닝","level":"[입문]","students":2659,"price":"","subscribable":false}],"대학 교육":[{"id":"269954","title":"선형대수학개론","instructor":"조범희 (타블렛깎는노인)","link":"https://www.inflearn.com/course/선형대수학개론","level":"[초급]","students":2866,"price":77000,"subscribable":false},{"id":"276507","title":"스크래치 코딩으로 배우는 수학의 개념과 원리","instructor":"노마드크리에이터","link":"https://www.inflearn.com/course/스크래치","level":"[입문]","students":1798,"price":"","subscribable":false},{"id":"327789","title":"수학으로부터 인류를 자유롭게 하라(기초대수학편)","instructor":"공대형아(신경식)","link":"https://www.inflearn.com/course/기초-대수학-중고등","level":"[입문]","students":1053,"price":44000,"subscribable":false},{"id":"324011","title":"벡터 미적분학 시리즈1 - 미분 기초","instructor":"조범희 (타블렛깎는노인)","link":"https://www.inflearn.com/course/벡터미적분학기초1","level":"[초급]","students":918,"price":44000,"subscribable":false},{"id":"309364","title":"파이썬을 활용한 선형대수학 - NumPy와 SciPy의 활용","instructor":"조범희 (타블렛깎는노인)","link":"https://www.inflearn.com/course/선형대수학","level":"[초급]","students":773,"price":55000,"subscribable":false},{"id":"326361","title":"머신러닝/딥러닝으로 이어지는 선형대수","instructor":"딥러닝호형","link":"https://www.inflearn.com/course/딥러닝-선형대수","level":"[입문]","students":654,"price":55000,"subscribable":false},{"id":"341911","title":"How to Speak","instructor":"Open Academy","link":"https://www.inflearn.com/course/how-to-speak","level":"[입문]","students":644,"price":"","subscribable":false},{"id":"324052","title":"벡터 미적분학 시리즈2 - 미분 심화: 최적화 이론의 기초와 벡터 함수","instructor":"조범희 (타블렛깎는노인)","link":"https://www.inflearn.com/course/벡터미적분학기초2","level":"[중급이상]","students":613,"price":55000,"subscribable":false},{"id":"324134","title":"벡터 미적분학 시리즈3 - 적분 기초","instructor":"조범희 (타블렛깎는노인)","link":"https://www.inflearn.com/course/벡터-미적분-적분-기초","level":"[초급]","students":487,"price":39600,"subscribable":false},{"id":"333663","title":"처음 시작하는 MATLAB","instructor":"부산대학교 AI융합교육원","link":"https://www.inflearn.com/course/처음-시작-matlab","level":"[입문]","students":486,"price":"","subscribable":false},{"id":"325944","title":"인공지능 기초수학","instructor":"제이미","link":"https://www.inflearn.com/course/인공지능-기초수학","level":"[입문]","students":453,"price":88000,"subscribable":false},{"id":"324268","title":"벡터 미적분학 시리즈4 - 적분 심화","instructor":"조범희 (타블렛깎는노인)","link":"https://www.inflearn.com/course/벡터-미적분-적분-심화","level":"[중급이상]","students":449,"price":49500,"subscribable":false},{"id":"332608","title":"공업수학을 위한 중학, 고교수학","instructor":"지식탐험단","link":"https://www.inflearn.com/course/중등-고등-수학-공업수학","level":"[입문]","students":443,"price":121000,"subscribable":true},{"id":"328526","title":"확률과 통계 기초","instructor":"조범희 (타블렛깎는노인)","link":"https://www.inflearn.com/course/확률과-통계-기초","level":"[중급이상]","students":371,"price":99000,"subscribable":false},{"id":"328611","title":"수학으로부터 인류를 자유롭게 하라(미적분학 Part.I) - 미분","instructor":"공대형아(신경식)","link":"https://www.inflearn.com/course/미적분학-미분-1","level":"[입문]","students":330,"price":38500,"subscribable":false},{"id":"335266","title":"패션리테일분석 (Fashion Retail Analysis)","instructor":"부산대학교 AI융합교육원","link":"https://www.inflearn.com/course/부산대-패션-리테일-분석","level":"[입문]","students":231,"price":"","subscribable":false},{"id":"331431","title":"확률과 통계 101","instructor":"루비네 코딩","link":"https://www.inflearn.com/course/확률-통계-101","level":"[초급]","students":231,"price":77000,"subscribable":false},{"id":"329728","title":"통계 분석 마스터 클래스","instructor":"Masocampus","link":"https://www.inflearn.com/course/통계-분석-마스터-클래스","level":"[초급]","students":195,"price":99000,"subscribable":true},{"id":"328988","title":"수학으로부터 인류를 자유롭게 하라(선형대수학 Part.I) - 벡터기하학","instructor":"공대형아(신경식)","link":"https://www.inflearn.com/course/선형대수학-part-1-벡터기하학","level":"[입문]","students":193,"price":69300,"subscribable":false},{"id":"328575","title":"수식 작성을 위한 레이텍(LaTeX) 튜토리얼","instructor":"공대형아(신경식)","link":"https://www.inflearn.com/course/수식-작성-레이텍-튜토리얼","level":"[입문]","students":180,"price":16500,"subscribable":false}],"디자인 · 아트":[{"id":"324779","title":"효과적인 모바일 UX 만들기 (디자인 + 코딩)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/모바일-ux-디자인-코딩","level":"[초급]","students":106961,"price":79200,"subscribable":true},{"id":"324688","title":"왕초보를 위한 Adobe Photoshop CC 2019 입문자 가이드","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/왕초보-포토샵-입문","level":"[입문]","students":101167,"price":108900,"subscribable":true},{"id":"324698","title":"Adobe Premiere Pro CC 2018, 2019 영상편집의 입문 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/프리미어-입문-1","level":"[초급]","students":94010,"price":77000,"subscribable":true},{"id":"324709","title":"After Effects CC 모션 이펙트의 활용","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/애프터이펙트-모션이펙트","level":"[초급]","students":91701,"price":35200,"subscribable":true},{"id":"324699","title":"Adobe Premiere Pro CC 2018, 2019 영상편집의 입문 Part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/프리미어-입문-2","level":"[초급]","students":90946,"price":70400,"subscribable":true},{"id":"325524","title":"실무로 배우는 Photoshop CC 2020","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/포토샵-cc-2020-실무","level":"[초급]","students":86376,"price":26400,"subscribable":true},{"id":"326200","title":"누구나 할 수 있는 이모티콘 디자인 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/누구나-이모티콘-디자인","level":"[입문]","students":82168,"price":59400,"subscribable":true},{"id":"324706","title":"After Effects CC 2018 Expression의 입문","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/애프터이펙트-익스프레션","level":"[중급이상]","students":81937,"price":70400,"subscribable":true},{"id":"324643","title":"누구나 할 수 있는 웹툰(webtoon) 그리기 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/누구나-웹툰-그리기","level":"[입문]","students":80286,"price":92400,"subscribable":true},{"id":"325522","title":"실무로 배우는 Illustrator CC 2020","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/일러스트레이터-cc-2020-실무","level":"[초급]","students":75888,"price":17600,"subscribable":true},{"id":"325519","title":"Illustrator CC 2020 제대로 배우기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/어도비-일러스트레이터-cc-2020","level":"[초급]","students":70906,"price":24200,"subscribable":true},{"id":"324691","title":"Sigil(시길)을 이용하여 전자책 만들기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/시길-전자책","level":"[입문]","students":70903,"price":38500,"subscribable":true},{"id":"324697","title":"Adobe After Effects CC 2018, 2019 업데이트","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/애프터이펙트-업데이트","level":"[초급]","students":70630,"price":35200,"subscribable":true},{"id":"324753","title":"쉽게 따라하는 SketchUp Pro 2019 (한국어판)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/sketchup-2019","level":"[입문]","students":69641,"price":38500,"subscribable":true},{"id":"324708","title":"After Effects CC 2017와 CINEMA 4D 작업 연동의 입문","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/애프터이펙트-시네마4d","level":"[중급이상]","students":67977,"price":70400,"subscribable":true},{"id":"325521","title":"Adobe XD로 시작하는 모바일 코딩 (CC 2020) Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/어도비-xd-모바일-프로토타이핑","level":"[초급]","students":66527,"price":41800,"subscribable":true},{"id":"326792","title":"누구나 할 수 있는 웹툰(webtoon) 그리기 Part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/누구나-웹툰-그리기2","level":"[초급]","students":65785,"price":112200,"subscribable":true},{"id":"324655","title":"Autodesk Maya 3D 그래픽의 입문 Part.4 Animation","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/마야-입문-4","level":"[초급]","students":65760,"price":108900,"subscribable":true},{"id":"324652","title":"Autodesk Maya 3D 그래픽의 입문 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/마야-입문-1","level":"[초급]","students":64908,"price":38500,"subscribable":true},{"id":"324752","title":"쉽게 따라하는 AutoCAD 2020 3D (한국어판)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/autocad-3d-2020","level":"[초급]","students":63138,"price":26400,"subscribable":true}],"기획 · 경영 · 마케팅":[{"id":"328038","title":"노션(Notion) 데이터베이스 - 입문편","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/노션-데이터베이스-입문","level":"[입문]","students":66976,"price":30800,"subscribable":true},{"id":"328040","title":"노션(Notion) 데이터베이스 - 고급편","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/노션-데이터베이스-고급","level":"[초급]","students":66816,"price":44000,"subscribable":true},{"id":"328039","title":"노션(Notion) 데이터베이스 - 중급편","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/노션-데이터베이스-중급","level":"[초급]","students":63782,"price":41800,"subscribable":true},{"id":"324181","title":"노션(notion) 완벽 활용법","instructor":"보안프로젝트","link":"https://www.inflearn.com/course/노션-notion-활용","level":"[입문]","students":41229,"price":"","subscribable":false},{"id":"329822","title":"전산회계 2급 자격증 따기 2022 (이론)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/전산회계-2급-2022-이론","level":"[입문]","students":13024,"price":48400,"subscribable":true},{"id":"329920","title":"전산회계 2급 자격증 따기 2022 (실기)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/전산회계-2급-2022-실기","level":"[초급]","students":12699,"price":17600,"subscribable":true},{"id":"327644","title":"노션사용법 - 조직이 노션을 쓰기 위해 알아야 할 모든 것","instructor":"그로스쿨","link":"https://www.inflearn.com/course/슬기로운-노션-활용법","level":"[입문]","students":6866,"price":"","subscribable":false},{"id":"327584","title":"문서로 커뮤니케이션하는 직장인 평생 생존스킬. 문서 구조화와 시각화","instructor":"그로스쿨","link":"https://www.inflearn.com/course/문서-구조화-시각화","level":"[초급]","students":6704,"price":44000,"subscribable":false},{"id":"326749","title":"제품 관리자와 서비스 기획자를 위한 실전 노하우 - 아낌없이 드립니다!","instructor":"조영수(데이먼)","link":"https://www.inflearn.com/course/제품-관리자-실전-노하우","level":"[초급]","students":6221,"price":"","subscribable":false},{"id":"336834","title":"모든 직장인을 위한 누구나 이해할 수 있는 인공지능","instructor":"최진영","link":"https://www.inflearn.com/course/기획자와-pm을-위한-인공지능-강의","level":"[입문]","students":4258,"price":28600,"subscribable":false},{"id":"324487","title":"그로스해킹 - 데이터와 실험을 통해 성장하는 서비스를 만드는 방법","instructor":"양승화","link":"https://www.inflearn.com/course/그로스해킹-데이터-실험-성장-서비스","level":"[초급]","students":3206,"price":59400,"subscribable":true},{"id":"326643","title":"[하루 10분|GA] Google Analytics(GA) 보고서 살펴보기","instructor":"판다코딩","link":"https://www.inflearn.com/course/하루-10분-구글-애널리틱스","level":"[입문]","students":3199,"price":"","subscribable":false},{"id":"328833","title":"PM을 위한 IT SI프로젝트 전 과정 알아가기","instructor":"불꽃남자25","link":"https://www.inflearn.com/course/pm-si-프로젝트-알아가기","level":"[초급]","students":3065,"price":"","subscribable":false},{"id":"326720","title":"비개발자를 위한 IT 직무 총정리!","instructor":"조영수(데이먼)","link":"https://www.inflearn.com/course/it-직무-시리즈","level":"[입문]","students":2916,"price":"","subscribable":false},{"id":"329416","title":"PM을 위한 데이터 리터러시(프로덕트 데이터 분석)","instructor":"카일스쿨","link":"https://www.inflearn.com/course/pm-데이터-리터러시","level":"[초급]","students":2876,"price":132000,"subscribable":true},{"id":"331829","title":"마케터 이승희 님과 함께 인사이트 찾으러 가기","instructor":"인프런","link":"https://www.inflearn.com/course/마케팅-밋업-이승희","level":"[입문]","students":2694,"price":"","subscribable":false},{"id":"331265","title":"데이터 드리븐 마케팅 101 (Data Marketing)","instructor":"아이지에이웍스(IGAWorks)","link":"https://www.inflearn.com/course/데이터-드리븐-마케팅-101","level":"[초급]","students":2365,"price":"","subscribable":false},{"id":"335402","title":"350개의 개인 앱을 만들어 월급의 7배 수익을 달성한 방법","instructor":"프로그래밍좀비","link":"https://www.inflearn.com/course/350개-개인앱-월급7배-수익달성방법","level":"[초급]","students":2265,"price":429000,"subscribable":false},{"id":"325614","title":"JIRA를 활용해 더 효과적으로 프로젝트 협업하기","instructor":"lesstif","link":"https://www.inflearn.com/course/지라-프로젝트협업","level":"[초급]","students":1953,"price":55000,"subscribable":false},{"id":"325903","title":"IT 회사에서 비개발자가 살아남기 위한 모든 개발 지식 A to Z","instructor":"그랩","link":"https://www.inflearn.com/course/it-개발지식","level":"[입문]","students":1925,"price":55000,"subscribable":false}],"커리어 · 자기계발":[{"id":"326724","title":"컴퓨터활용능력 1,2급 필기 - 컴퓨터 일반","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/컴활-필기-컴퓨터일반","level":"[입문]","students":74408,"price":33000,"subscribable":true},{"id":"327867","title":"언택트창업 쿠팡으로 돈벌기 Part.1 마켓플레이스","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/언택트창업-마켓플레이스","level":"[입문]","students":40088,"price":29700,"subscribable":true},{"id":"327868","title":"언택트창업 쿠팡으로 돈벌기 Part.2 제휴마케팅(파트너스)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/언택트창업-제휴마케팅","level":"[입문]","students":39642,"price":20900,"subscribable":true},{"id":"327885","title":"Amazon(아마존) 글로벌 셀러되기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/아마존-셀러되기","level":"[입문]","students":37546,"price":17600,"subscribable":true},{"id":"333335","title":"파이썬 주식 매매 봇으로 주식시장 자동사냥하기","instructor":"MoneyPouch","link":"https://www.inflearn.com/course/파이썬-주식매매봇-자동사냥","level":"[초급]","students":5180,"price":86900,"subscribable":true},{"id":"329442","title":"시작해보세요! 당신의 첫 지식공유","instructor":"인프런","link":"https://www.inflearn.com/course/지식공유자-강의-만들기","level":"[입문]","students":4890,"price":"","subscribable":false},{"id":"328426","title":"컴퓨터활용능력 1,2급 실기 - 스프레드시트 실무","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/컴활-실기-엑셀실무","level":"[초급]","students":4210,"price":55000,"subscribable":true},{"id":"325485","title":"[왕기초편] 쓱싹 쓱싹 그림을 그려요","instructor":"진 (Jin)","link":"https://www.inflearn.com/course/데일리드로잉-왕기초편","level":"[입문]","students":4134,"price":"","subscribable":false},{"id":"328823","title":"CS 지식의 정석 | 디자인패턴 네트워크 운영체제 데이터베이스 자료구조","instructor":"큰돌","link":"https://www.inflearn.com/course/개발자-면접-cs-특강","level":"[초급]","students":4090,"price":165000,"subscribable":false},{"id":"328427","title":"컴퓨터활용능력 1,2급 필기 - 스프레드시트 일반","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/컴활-필기-엑셀일반","level":"[입문]","students":4089,"price":55000,"subscribable":true},{"id":"334097","title":"[인프런] 강의 제작부터 홍보까지: 인프런과 함께하는 지식공유 여정","instructor":"인프런","link":"https://www.inflearn.com/course/강의제작-홍보까지-인프런-지식공유여정","level":"[입문]","students":3772,"price":"","subscribable":false},{"id":"332105","title":"초보자를 위한 발표 요령","instructor":"드립커피+한모금더","link":"https://www.inflearn.com/course/초보자-발표-요령","level":"[입문]","students":3654,"price":11000,"subscribable":true},{"id":"326354","title":"비전공자를 위한 개발자 취업 올인원 가이드 [통합편]","instructor":"한정수","link":"https://www.inflearn.com/course/개발자-취업-통합편","level":"[입문]","students":3101,"price":77000,"subscribable":false},{"id":"336282","title":"ChatGPT 만능 프롬프트로 이력서와 자기소개서 완성하기","instructor":"커리어 디","link":"https://www.inflearn.com/course/chat-gpt-이력서와-자기소개서-완성하기","level":"[입문]","students":3006,"price":53900,"subscribable":true},{"id":"337255","title":"[머니업 라이브] 350개 앱을 만들며 정리한 실전 앱 수익화 노하우!","instructor":"프로그래밍좀비","link":"https://www.inflearn.com/course/머니업라이브-app","level":"[입문]","students":2871,"price":"","subscribable":false},{"id":"326131","title":"찐~ 보안전문가 되기(정보보안의 현재와 미래)","instructor":"Security Reader","link":"https://www.inflearn.com/course/정보보안-커리어-입문","level":"[입문]","students":2652,"price":"","subscribable":false},{"id":"327418","title":"게임 프로그래머 취업 전략 가이드","instructor":"Rookiss","link":"https://www.inflearn.com/course/게임-프로그래머-취업","level":"[입문]","students":2574,"price":33000,"subscribable":false},{"id":"328376","title":"실제 이력서 사례로 알아보는 [합격하는 이력서] 작성 가이드","instructor":"워니","link":"https://www.inflearn.com/course/합격하는-이력서-작성-가이드","level":"[입문]","students":2414,"price":49500,"subscribable":false},{"id":"328355","title":"기출로 대비하는 개발자 전공면접 [CS 완전정복]","instructor":"개발남노씨","link":"https://www.inflearn.com/course/개발자-전공면접-cs-완전정복","level":"[초급]","students":2221,"price":165000,"subscribable":false},{"id":"331734","title":"AI 도구 활용한 영상 만들기(feat. Chat GPT, D-ID, 네이버 클로바 더빙, 레오나르도 AI)","instructor":"스탠리탬","link":"https://www.inflearn.com/course/ai-영상-만들기","level":"[입문]","students":2143,"price":"","subscribable":false}],"개발 · 프로그래밍":[{"id":"326827","title":"예제로 공부하는 Python 100 문제풀이 Part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/파이썬-100제-2","level":"[초급]","students":126300,"price":49500,"subscribable":true},{"id":"325630","title":"스프링 입문 - 코드로 배우는 스프링 부트, 웹 MVC, DB 접근 기술","instructor":"김영한","link":"https://www.inflearn.com/course/스프링-입문-스프링부트","level":"[초급]","students":121891,"price":"","subscribable":false},{"id":"326828","title":"예제로 공부하는 Python 100 문제풀이 Part.3","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/파이썬-100제-3","level":"[초급]","students":110274,"price":49500,"subscribable":true},{"id":"326826","title":"예제로 공부하는 Python 100 문제풀이 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/파이썬-100제-1","level":"[입문]","students":109680,"price":49500,"subscribable":true},{"id":"327742","title":"자바스크립트+jQuery 기초부터 실무까지 : 기초 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/자바스크립트-제이쿼리-기초-1","level":"[입문]","students":107694,"price":34100,"subscribable":true},{"id":"326833","title":"예제로 공부하는 Java 100 문제풀이 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/자바-100제-1","level":"[입문]","students":101140,"price":26400,"subscribable":true},{"id":"324868","title":"부트스트랩(BOOTSTRAP)3을 활용한 반응형 웹페이지 만들기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/rwd-bootstrap","level":"[초급]","students":99994,"price":39600,"subscribable":true},{"id":"326840","title":"예제로 공부하는 Java 100 문제풀이 Part.4","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/자바-100제-4","level":"[초급]","students":83175,"price":35200,"subscribable":true},{"id":"326839","title":"예제로 공부하는 Java 100 문제풀이 Part.3","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/자바-100제-3","level":"[초급]","students":82772,"price":44000,"subscribable":true},{"id":"326838","title":"예제로 공부하는 Java 100 문제풀이 Part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/자바-100제-2","level":"[초급]","students":82018,"price":35200,"subscribable":true},{"id":"326841","title":"예제로 공부하는 Java 100 문제풀이 Part.5","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/자바-100제-5","level":"[초급]","students":81628,"price":46200,"subscribable":true},{"id":"328050","title":"파이썬(Python) 기초부터 실무까지 part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/파이썬-기초부터-실무까지-1","level":"[입문]","students":75331,"price":71500,"subscribable":true},{"id":"325520","title":"MSSQL Server 2016 기반의 데이터베이스 입문에서 활용까지 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mssql-데이터베이스-파트1","level":"[입문]","students":73221,"price":74800,"subscribable":true},{"id":"325528","title":"MSSQL Server 2016 기반의 데이터베이스 입문에서 활용까지 Part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mssql-데이터베이스-파트2","level":"[초급]","students":73137,"price":126500,"subscribable":true},{"id":"328054","title":"파이썬(Python) 기초부터 실무까지 part.4","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/파이썬-기초부터-실무까지-4","level":"[초급]","students":73041,"price":51700,"subscribable":true},{"id":"326654","title":"정보처리기사 실기 (2020 개정) 제대로 배우기 Part.1","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/정보처리기사-실기-1","level":"[초급]","students":72994,"price":24200,"subscribable":true},{"id":"325527","title":"MSSQL Server 2016 기반의 데이터베이스 입문에서 활용까지 Part.3","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mssql-데이터베이스-파트3","level":"[중급이상]","students":71974,"price":168300,"subscribable":true},{"id":"326662","title":"정보처리기사 실기 (2020 개정) 제대로 배우기 Part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/정보처리기사-실기-2","level":"[초급]","students":71968,"price":26400,"subscribable":true},{"id":"328052","title":"파이썬(Python) 기초부터 실무까지 part.3","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/파이썬-기초부터-실무까지-3","level":"[초급]","students":71702,"price":64900,"subscribable":true},{"id":"328051","title":"파이썬(Python) 기초부터 실무까지 part.2","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/파이썬-기초부터-실무까지-2","level":"[입문]","students":71152,"price":71500,"subscribable":true}],"게임 개발":[{"id":"23396","title":"유니티 기초 강좌 - 기획부터 사용까지","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/유니티-기초-강좌-기획부터-사용까지-2","level":"[입문]","students":13360,"price":"","subscribable":false},{"id":"325624","title":"따라하면서 배우는 고박사의 유니티 기초","instructor":"고박사","link":"https://www.inflearn.com/course/고박사-유니티-기초","level":"[입문]","students":11604,"price":"","subscribable":false},{"id":"325470","title":"파이썬 무료 강의 (활용편1) - 추억의 오락실 게임 만들기 (3시간)","instructor":"나도코딩","link":"https://www.inflearn.com/course/나도코딩-파이썬-활용편-1","level":"[초급]","students":8538,"price":"","subscribable":false},{"id":"22933","title":"유니티 2D 로그라이크 게임 만들기 [한글자막]","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/유니티-3d-게임-만들기","level":"[초급]","students":7468,"price":"","subscribable":false},{"id":"324718","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part1: C# 기초 프로그래밍 입문","instructor":"Rookiss","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-part1","level":"[입문]","students":7244,"price":44000,"subscribable":false},{"id":"324817","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part3: 유니티 엔진","instructor":"Rookiss","link":"https://www.inflearn.com/course/mmorpg-유니티","level":"[초급]","students":6168,"price":88000,"subscribable":false},{"id":"326849","title":"게임 수학의 이해","instructor":"이득우","link":"https://www.inflearn.com/course/게임-수학-이해","level":"[입문]","students":5802,"price":"","subscribable":false},{"id":"324941","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part4: 게임 서버","instructor":"Rookiss","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-part4","level":"[중급이상]","students":5506,"price":88000,"subscribable":false},{"id":"24401","title":"실전 파이썬 게임 만들기 (Pygame)","instructor":"샵투월드","link":"https://www.inflearn.com/course/파이썬-게임-만들기-python","level":"[초급]","students":5324,"price":"","subscribable":false},{"id":"324727","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part2: 자료구조와 알고리즘","instructor":"Rookiss","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-part2","level":"[초급]","students":5164,"price":44000,"subscribable":false},{"id":"218115","title":"유니티 강좌 [쯔꾸르풍 게임 제작하기]","instructor":"케이디","link":"https://www.inflearn.com/course/unity","level":"[초급]","students":4844,"price":"","subscribable":false},{"id":"326079","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] 번외편: ASP.NET Core 심화편","instructor":"Rookiss","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-aspnet","level":"[중급이상]","students":4524,"price":"","subscribable":false},{"id":"325662","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part7: MMO 컨텐츠 구현 (Unity + C# 서버 연동 기초)","instructor":"Rookiss","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-part7","level":"[중급이상]","students":4203,"price":88000,"subscribable":false},{"id":"332673","title":"AI 시대의 혁신적인 게임 개발 입문 with Unity6","instructor":"UniCoti","link":"https://www.inflearn.com/course/ai-게임개발-입문-unity6","level":"[입문]","students":4139,"price":36300,"subscribable":true},{"id":"325283","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part5: 데이터베이스","instructor":"Rookiss","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-part5","level":"[초급]","students":3968,"price":44000,"subscribable":false},{"id":"94779","title":"언리얼 엔진 4 : Intro to Blueprints","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/언리얼-엔진-intro-to-blueprints","level":"[초급]","students":3776,"price":"","subscribable":false},{"id":"325464","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part6: 웹 서버","instructor":"Rookiss","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-part6","level":"[초급]","students":3734,"price":44000,"subscribable":false},{"id":"239324","title":"[유니티 3D] FPS 서바이벌 디펜스","instructor":"케이디","link":"https://www.inflearn.com/course/unity-3","level":"[초급]","students":3621,"price":"","subscribable":false},{"id":"325882","title":"[C#과 유니티로 만드는 MMORPG 게임 개발 시리즈] Part9: MMO 컨텐츠 구현 (DB연동 + 대형 구조 + 라이브 준비)","instructor":"Rookiss","link":"https://www.inflearn.com/course/유니티-mmorpg-개발-part9","level":"[중급이상]","students":3547,"price":88000,"subscribable":false},{"id":"326340","title":"유니티를 위한 C# 기초 프로그래밍-구조지향(무료)","instructor":"UDevApp","link":"https://www.inflearn.com/course/유니티-게임개발-파트1-2","level":"[입문]","students":3383,"price":"","subscribable":false}],"외국어":[{"id":"332101","title":"하루만에 오픽 IH 달성하기","instructor":"라파파","link":"https://www.inflearn.com/course/오픽-ih-하루완성","level":"[입문]","students":5603,"price":22000,"subscribable":true},{"id":"326281","title":"웃으며 배우는 생활일본어","instructor":"친절한 채원씨","link":"https://www.inflearn.com/course/생활일본어-초급","level":"[초급]","students":4048,"price":"","subscribable":false},{"id":"330157","title":"한시간만에 끝내는 영어 : 시드니개발자의 영어PT","instructor":"시드니개발자의 영어PT","link":"https://www.inflearn.com/course/한달-문법이해-개발자-영어","level":"[입문]","students":2152,"price":220000,"subscribable":true},{"id":"328024","title":"단어로 배우는 중국어 회화!","instructor":"하루배움 중국어","link":"https://www.inflearn.com/course/단어로-배우는-중국어-회화","level":"[입문]","students":1229,"price":9900,"subscribable":true},{"id":"325127","title":"스피킹 강자로 만들어주는 만능 영어회화패턴 12가지","instructor":"Karen T","link":"https://www.inflearn.com/course/만능영어회화패턴","level":"[초급]","students":609,"price":29700,"subscribable":false},{"id":"326403","title":"씨리얼 오픽 3급(IM 1,2) 과정","instructor":"다름에듀","link":"https://www.inflearn.com/course/씨리얼-오픽-im","level":"[초급]","students":390,"price":33000,"subscribable":false},{"id":"324952","title":"안녕, 일본어는 처음이지? 누구나 쉽게 배우는 기초 일본어!","instructor":"친절한 채원씨","link":"https://www.inflearn.com/course/누구나-쉽게-배우는-기초일본어","level":"[입문]","students":335,"price":38500,"subscribable":true},{"id":"330534","title":"초보자를 위한 <어바웃타임> 쉐도잉 마스터 클래스","instructor":"박지현 (Roy)","link":"https://www.inflearn.com/course/어바웃타임-쉐도잉-클래스","level":"[초급]","students":288,"price":99000,"subscribable":true},{"id":"326401","title":"씨리얼 오픽 2급(IM3~IH) 과정","instructor":"다름에듀","link":"https://www.inflearn.com/course/씨리얼-오픽-ih","level":"[중급이상]","students":269,"price":33000,"subscribable":false},{"id":"336171","title":"3세대 영어: 말문 트이는 실전 문법 클래스","instructor":"박지현 (Roy)","link":"https://www.inflearn.com/course/초보-문법-강의","level":"[입문]","students":202,"price":66000,"subscribable":true},{"id":"328999","title":"원어민 수준 찍는 영어회화 공부방법","instructor":"스테파니","link":"https://www.inflearn.com/course/원어민-수준-영어회화-공부-방법","level":"[입문]","students":132,"price":15400,"subscribable":false},{"id":"326353","title":"씨리얼 오픽 1급(AL) 과정","instructor":"다름에듀","link":"https://www.inflearn.com/course/씨리얼-오픽-al","level":"[중급이상]","students":131,"price":33000,"subscribable":false},{"id":"326436","title":"씨리얼 오픽 - 롤플레이 STEP 1(01~15강)","instructor":"다름에듀","link":"https://www.inflearn.com/course/씨리얼-오픽-롤플레이-1","level":"[초급]","students":113,"price":33000,"subscribable":false},{"id":"325184","title":"취미로 시작하는 중국어 회화 [입문]","instructor":"홍차는홍차","link":"https://www.inflearn.com/course/취미-시작-중국어-회화","level":"[입문]","students":112,"price":55000,"subscribable":false},{"id":"326451","title":"씨리얼 오픽 - 난이도 3&4 실전 테스트","instructor":"다름에듀","link":"https://www.inflearn.com/course/씨리얼-오픽-실전테스트-1","level":"[초급]","students":102,"price":33000,"subscribable":false},{"id":"326440","title":"씨리얼 오픽 - 이슈주제 STEP 1(01~15강)","instructor":"다름에듀","link":"https://www.inflearn.com/course/씨리얼-오픽-이슈주제-1","level":"[중급이상]","students":90,"price":33000,"subscribable":false},{"id":"326404","title":"씨리얼 오픽 - 돌발주제 STEP 1(01~15강)","instructor":"다름에듀","link":"https://www.inflearn.com/course/씨리얼-오픽-돌발주제-1","level":"[초급]","students":84,"price":33000,"subscribable":false},{"id":"332552","title":"키워드로 듣고 답하는 퀵 오픽 IM+ Step1","instructor":"365ENM","link":"https://www.inflearn.com/course/퀵-오픽-im-step1","level":"[초급]","students":65,"price":77000,"subscribable":false},{"id":"326437","title":"씨리얼 오픽 - 롤플레이 STEP 2(16~30강)","instructor":"다름에듀","link":"https://www.inflearn.com/course/씨리얼-오픽-롤플레이-2","level":"[초급]","students":63,"price":33000,"subscribable":false},{"id":"331069","title":"원어민처럼 쓰는 비즈니스 필수동사","instructor":"스터디파이","link":"https://www.inflearn.com/course/원어민처럼-쓰는-비즈니스-필수동사","level":"[초급]","students":46,"price":128700,"subscribable":false}],"업무 생산성":[{"id":"324773","title":"Tip으로 배우는 엑셀(Excel)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/팁으로-배우는-엑셀","level":"[초급]","students":120087,"price":22000,"subscribable":true},{"id":"324770","title":"실무로 배우는 엑셀(Excel) 2019","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/실무로-배우는-엑셀-2019","level":"[초급]","students":101306,"price":18700,"subscribable":true},{"id":"324776","title":"한글(한컴오피스) 제대로 배우기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/한글-오피스-배우기","level":"[입문]","students":71784,"price":35200,"subscribable":true},{"id":"324789","title":"MOS Excel Expert 2016 자격증 따기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mos-excel-expert-2016","level":"[초급]","students":65433,"price":39600,"subscribable":true},{"id":"324788","title":"MOS Excel Core 2016 자격증 따기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mos-excel-core-2016","level":"[입문]","students":65026,"price":35200,"subscribable":true},{"id":"324790","title":"MOS PowerPoint 2016 자격증 따기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mos-powerpoint-2016","level":"[입문]","students":62569,"price":30800,"subscribable":true},{"id":"324792","title":"MOS Word Expert 2016 자격증 따기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mos-word-expert-2016","level":"[초급]","students":58040,"price":35200,"subscribable":true},{"id":"324791","title":"MOS Word Core 2016 자격증 따기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mos-word-core-2016","level":"[입문]","students":56780,"price":27500,"subscribable":true},{"id":"324787","title":"MOS Access 2016 자격증 따기","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/mos-access-2016","level":"[입문]","students":53399,"price":36300,"subscribable":true},{"id":"326489","title":"엑셀 시작하기 : EXCEL 입문 (Inflearn Original)","instructor":"인프런","link":"https://www.inflearn.com/course/엑셀-입문-인프런-오리지널","level":"[입문]","students":44257,"price":55000,"subscribable":true},{"id":"327833","title":"워드프로세서 필기+실기 (2021 개정)","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/워드프로세서-필기실기","level":"[입문]","students":38774,"price":22000,"subscribable":true},{"id":"331307","title":"엑셀 활용하기 : EXCEL 중급 (Inflearn Original)","instructor":"인프런","link":"https://www.inflearn.com/course/엑셀-중급-인프런-오리지널","level":"[중급이상]","students":34751,"price":55000,"subscribable":true},{"id":"256278","title":"엑셀 기초에서 실무까지","instructor":"짤막한 강좌(한정희)","link":"https://www.inflearn.com/course/엑셀","level":"[입문]","students":19321,"price":"","subscribable":false},{"id":"32320","title":"빅데이터의 통찰력을 키워주는 엑셀 Quick Start","instructor":"topmentor","link":"https://www.inflearn.com/course/엑셀-강좌","level":"[입문]","students":17977,"price":"","subscribable":false},{"id":"324634","title":"엑셀 기초부터 고급까지","instructor":"루미의 컴퓨터 강좌","link":"https://www.inflearn.com/course/엑셀-기초부터-고급까지","level":"[입문]","students":6994,"price":"","subscribable":false},{"id":"32184","title":"잘쓰는 기능만 쏙 뽑아 배우는 파워포인트 Quick Start","instructor":"topmentor","link":"https://www.inflearn.com/course/파워포인트-강좌-quick-start","level":"[입문]","students":6491,"price":"","subscribable":false},{"id":"324739","title":"데이터 자동화(with VBA)","instructor":"배영자","link":"https://www.inflearn.com/course/데이터자동화-with-vba","level":"[중급이상]","students":5562,"price":"","subscribable":false},{"id":"330111","title":"[신규 개정판] 이것이 진짜 엑셀자동화다 - 기본편","instructor":"스타트코딩","link":"https://www.inflearn.com/course/파이썬-업무-자동화-기본편","level":"[입문]","students":5455,"price":"","subscribable":false},{"id":"324445","title":"업무 자동화를 위한 파이썬 pyautogui, beautifulsoup 크롤링 기초","instructor":"김플","link":"https://www.inflearn.com/course/업무자동화-파이썬-pyautogui-크롤링기초","level":"[초급]","students":5112,"price":"","subscribable":false},{"id":"326663","title":"파이썬 무료 강의 (활용편4) - 업무자동화 (RPA)","instructor":"나도코딩","link":"https://www.inflearn.com/course/나도코딩-업무자동화-파이썬","level":"[초급]","students":4741,"price":"","subscribable":false}],"하드웨어":[{"id":"327067","title":"컴알못이 보는 컴퓨터 하드웨어 기초상식","instructor":"제주코딩베이스캠프","link":"https://www.inflearn.com/course/컴퓨터-하드웨어-기초상식","level":"[입문]","students":7007,"price":"","subscribable":false},{"id":"22461","title":"아두이노 강좌","instructor":"유용한IT학습","link":"https://www.inflearn.com/course/아두이노-강좌","level":"[입문]","students":4159,"price":"","subscribable":false},{"id":"223277","title":"HAL, CubeMX, TrueSTUDIO를 이용한 STM32F4 무료 강좌","instructor":"ChrisP","link":"https://www.inflearn.com/course/stm32f4","level":"[초급]","students":3540,"price":"","subscribable":false},{"id":"331452","title":"제품부터 시작하는 인우의 반도체 CHIP 회로설계 이야기","instructor":"회로설계 멘토 삼코치","link":"https://www.inflearn.com/course/제품부터-시작하는-반도체-회로설계","level":"[초급]","students":3197,"price":"","subscribable":false},{"id":"326659","title":"라즈베리파이 IoT 프로그램과 클라우드 입문 과정","instructor":"보안프로젝트","link":"https://www.inflearn.com/course/라즈베리파이-iot-입문","level":"[초급]","students":2816,"price":"","subscribable":false},{"id":"333153","title":"컴퓨터구조, 네트워크 기본 개념 정리","instructor":"더코딩클럽","link":"https://www.inflearn.com/course/컴퓨터구조-네트워크-개념","level":"[초급]","students":2706,"price":"","subscribable":false},{"id":"325516","title":"아두이노 시작하기","instructor":"메이커멘토","link":"https://www.inflearn.com/course/아두이노-시작하기","level":"[입문]","students":2672,"price":"","subscribable":false},{"id":"337646","title":"[CS 기술면접 1] 말이 트이는 컴퓨터 구조","instructor":"이용준","link":"https://www.inflearn.com/course/컴퓨터구조-비전공자-기술면접","level":"[입문]","students":2607,"price":"","subscribable":false},{"id":"324059","title":"바닥부터 시작하는 STM32 드론 개발의 모든 것","instructor":"ChrisP","link":"https://www.inflearn.com/course/stm32cubelde-stm32f4드론-개발","level":"[초급]","students":2291,"price":"","subscribable":false},{"id":"329480","title":"CAN 통신 - 자동차 신입이 알아야 할 모든 것","instructor":"존버매니아","link":"https://www.inflearn.com/course/자동차-신입-can통신","level":"[입문]","students":1785,"price":77000,"subscribable":false},{"id":"326616","title":"설계독학맛비's 실전 Verilog HDL Season 1 (Clock부터 Internal Memory까지)","instructor":"설계독학맛비","link":"https://www.inflearn.com/course/실전-베릴로그","level":"[초급]","students":1745,"price":247500,"subscribable":false},{"id":"288444","title":"아두이노를 이용한 기상정보 수집과 빅데이터 분석","instructor":"노마드크리에이터","link":"https://www.inflearn.com/course/아두이노-기상정보-수집-빅데이터-분석","level":"[입문]","students":1648,"price":"","subscribable":false},{"id":"325950","title":"Do it! 키트 없이 배우는 아두이노","instructor":"메이커멘토","link":"https://www.inflearn.com/course/키트없이-배우는-아두이노","level":"[입문]","students":1638,"price":"","subscribable":false},{"id":"326697","title":"설계독학맛비's 실전 FPGA를 이용한 HW 가속기 설계 (LED 제어부터 Fully Connected Layer 가속기 설계까지)","instructor":"설계독학맛비","link":"https://www.inflearn.com/course/실전-가속기-설계","level":"[중급이상]","students":1222,"price":297000,"subscribable":false},{"id":"329514","title":"실무자가 알려주는 CANoe (For CAN 통신)","instructor":"존버매니아","link":"https://www.inflearn.com/course/실무자가-알려주는-canoe","level":"[초급]","students":1034,"price":74800,"subscribable":false},{"id":"328838","title":"자동차 SW - UDS 진단통신 정복하기","instructor":"존버매니아","link":"https://www.inflearn.com/course/자동차-소프트웨어-진단통신","level":"[초급]","students":958,"price":52800,"subscribable":false},{"id":"327240","title":"FreeRTOS 프로그래밍","instructor":"홍영기","link":"https://www.inflearn.com/course/freertos-프로그래밍","level":"[초급]","students":926,"price":187000,"subscribable":false},{"id":"328764","title":"[임베디드 입문용] 임베디드 개발은 실제로 이렇게 해요.","instructor":"ojtube5","link":"https://www.inflearn.com/course/임베디드-개발-입문","level":"[초급]","students":848,"price":154000,"subscribable":false},{"id":"323991","title":"JoyWins 큰돌샘의 아두이노 기초 강좌","instructor":"큰돌샘(JoyWins)","link":"https://www.inflearn.com/course/사물인터넷","level":"[입문]","students":763,"price":"","subscribable":false},{"id":"329035","title":"시스코 네트워킹 아카데미: 사물인터넷 기초","instructor":"애스코(ASCKOR)","link":"https://www.inflearn.com/course/사물인터넷-기초-시스코","level":"[입문]","students":759,"price":33000,"subscribable":false}]}};
+// ── 카테고리 분포 ─────────────────────────────────────────
+function CatDistribution({courses}){
+  const cats=useMemo(()=>{
+    const m=new Map();
+    courses.forEach(c=>m.set(c.cat1,(m.get(c.cat1)||0)+1));
+    return [...m.entries()].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count);
+  },[courses]);
+  const totalCat=cats.reduce((a,c)=>a+c.count,0);
+  const maxCount=Math.max(...cats.map(c=>c.count),1);
+  return <div style={s.section}>
+    <p style={s.sectionTitle}>대표대분류별 강의 현황</p>
+    <p style={{...s.sectionSub,marginBottom:24}}>전체 {nf(totalCat)}개 강의 분포</p>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {cats.map((cat,i)=>{
+        const pct=totalCat?((cat.count/totalCat)*100).toFixed(1):0;
+        return <div key={i} style={{display:"grid",gridTemplateColumns:"140px 1fr 80px",alignItems:"center",gap:16}}>
+          <span style={{fontSize:13,color:"var(--gray-800)",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cat.name}</span>
+          <div style={{height:6,borderRadius:3,background:"var(--gray-100)",overflow:"hidden"}}>
+            <div style={{height:"100%",borderRadius:3,width:(cat.count/maxCount*100)+"%",background:CAT_COLORS[i%CAT_COLORS.length],transition:"width .6s ease"}}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:4}}>
+            <span style={{fontSize:14,fontWeight:700}}>{nf(cat.count)}</span>
+            <span style={{fontSize:11,color:"var(--gray-400)"}}>{pct}%</span>
+          </div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
 
-  const s = {
-    section: {background:"var(--white)",borderRadius:"var(--radius-lg)",border:"1px solid var(--gray-200)",padding:"28px 32px",marginBottom:16},
-    sectionTitle: {fontSize:15,fontWeight:700,color:"var(--black)",marginBottom:4,letterSpacing:"-0.2px"},
-    sectionSub: {fontSize:13,color:"var(--gray-400)",marginBottom:20},
-    tag: (active,color)=>({
-      display:"inline-block",padding:"5px 12px",borderRadius:999,fontSize:12,fontWeight:500,
-      cursor:"pointer",border:"none",transition:"all 0.12s",
-      background: active ? color : "var(--gray-100)",
-      color: active ? "#fff" : "var(--gray-600)",
-    }),
-    levelBadge: (level)=>{
-      const map = {"입문":{bg:"#EFF6FF",color:"#3B82F6"},"초급":{bg:"#F0FDF4",color:"#16A34A"},"중급이상":{bg:"#FFF7ED",color:"#EA580C"}};
-      const l = String(level||"").replace(/[[]]/g,"");
-      const c = map[l]||{bg:"var(--gray-100)",color:"var(--gray-600)"};
-      return {fontSize:11,fontWeight:500,padding:"2px 7px",borderRadius:4,background:c.bg,color:c.color};
-    },
+// ── 구독 커버리지 ─────────────────────────────────────────
+function Coverage({courses}){
+  const rows=useMemo(()=>{
+    const m=new Map();
+    courses.forEach(c=>{
+      const r=m.get(c.cat1)||{total:0,sub:0};
+      r.total++; if(c.subscribable) r.sub++;
+      m.set(c.cat1,r);
+    });
+    return [...m.entries()].map(([name,r])=>({name,total:r.total,sub:r.sub,pct:r.total?r.sub/r.total*100:0}))
+      .sort((a,b)=>b.pct-a.pct);
+  },[courses]);
+  return <div style={s.section}>
+    <p style={s.sectionTitle}>구독 커버리지</p>
+    <p style={s.sectionSub}>분야별 "전체 강의 중 구독으로 들을 수 있는 비율" · 구독권 영업 시 커버리지 근거</p>
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {rows.map((r,i)=>(
+        <div key={i} style={{display:"grid",gridTemplateColumns:"140px 1fr 150px",alignItems:"center",gap:16}}>
+          <span style={{fontSize:13,color:"var(--gray-800)",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</span>
+          <div style={{height:18,borderRadius:5,background:"var(--gray-100)",overflow:"hidden",position:"relative"}}>
+            <div style={{height:"100%",width:r.pct+"%",background:r.pct>=50?"var(--green)":r.pct>=25?"var(--orange)":"var(--gray-400)",transition:"width .6s ease"}}/>
+            <span style={{position:"absolute",left:8,top:0,height:"100%",display:"flex",alignItems:"center",fontSize:11,fontWeight:700,color:r.pct>15?"#fff":"var(--gray-600)"}}>{r.pct.toFixed(0)}%</span>
+          </div>
+          <span style={{fontSize:12,color:"var(--gray-600)",textAlign:"right"}}>구독 {nf(r.sub)} / 전체 {nf(r.total)}</span>
+        </div>
+      ))}
+    </div>
+  </div>;
+}
+
+// ── 무료 vs 유료 ──────────────────────────────────────────
+function FreePaid({courses}){
+  const {free,paid}=useMemo(()=>{
+    let free=0; courses.forEach(c=>{if(isFree(c.price))free++;});
+    return {free,paid:courses.length-free};
+  },[courses]);
+  const total=free+paid;
+  const freePct=total?free/total*100:0;
+  const byCat=useMemo(()=>{
+    const m=new Map();
+    courses.forEach(c=>{
+      const r=m.get(c.cat1)||{free:0,total:0};
+      r.total++; if(isFree(c.price))r.free++; m.set(c.cat1,r);
+    });
+    return [...m.entries()].map(([name,r])=>({name,free:r.free,total:r.total,pct:r.total?r.free/r.total*100:0}))
+      .sort((a,b)=>b.total-a.total);
+  },[courses]);
+  const ring={width:140,height:140,borderRadius:"50%",background:`conic-gradient(var(--green) 0 ${freePct}%, var(--gray-800) ${freePct}% 100%)`,display:"flex",alignItems:"center",justifyContent:"center"};
+  return <div style={s.section}>
+    <p style={s.sectionTitle}>무료 vs 유료</p>
+    <p style={s.sectionSub}>가격 정보 기준 · 무료 콘텐츠 비중</p>
+    <div style={{display:"flex",gap:32,alignItems:"center",flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"center",gap:20}}>
+        <div style={ring}><div style={{width:96,height:96,borderRadius:"50%",background:"var(--white)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:22,fontWeight:800,color:"var(--green)"}}>{freePct.toFixed(0)}%</span>
+          <span style={{fontSize:10,color:"var(--gray-400)"}}>무료</span>
+        </div></div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:10,height:10,borderRadius:2,background:"var(--green)"}}/><span style={{fontSize:13,color:"var(--gray-800)"}}>무료 <b>{nf(free)}</b>개</span></div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{width:10,height:10,borderRadius:2,background:"var(--gray-800)"}}/><span style={{fontSize:13,color:"var(--gray-800)"}}>유료 <b>{nf(paid)}</b>개</span></div>
+        </div>
+      </div>
+      <div style={{flex:1,minWidth:300,display:"flex",flexDirection:"column",gap:9}}>
+        {byCat.map((r,i)=>(
+          <div key={i} style={{display:"grid",gridTemplateColumns:"120px 1fr 70px",alignItems:"center",gap:12}}>
+            <span style={{fontSize:12,color:"var(--gray-600)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</span>
+            <div style={{height:8,borderRadius:4,background:"var(--gray-100)",overflow:"hidden",display:"flex"}}>
+              <div style={{height:"100%",width:r.pct+"%",background:"var(--green)"}}/>
+            </div>
+            <span style={{fontSize:11,color:"var(--gray-400)",textAlign:"right"}}>무료 {r.pct.toFixed(0)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>;
+}
+
+// ── 인기 Top5 ─────────────────────────────────────────────
+function Popular({courses}){
+  const cats=useMemo(()=>{
+    const m=new Map();
+    courses.forEach(c=>m.set(c.cat1,(m.get(c.cat1)||0)+1));
+    return [...m.entries()].sort((a,b)=>b[1]-a[1]).map(([name])=>name);
+  },[courses]);
+  const [tab,setTab]=useState(cats[0]);
+  const top5=useMemo(()=>courses.filter(c=>c.cat1===tab).sort((a,b)=>b.students-a.students).slice(0,5),[courses,tab]);
+  return <div style={s.section}>
+    <p style={s.sectionTitle}>대표대분류별 인기 강좌 Top 5</p>
+    <p style={s.sectionSub}>수강생 수 기준</p>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:20}}>
+      {cats.map((c,i)=>(<button key={c} onClick={()=>setTab(c)} style={s.tag(tab===c,CAT_COLORS[i%CAT_COLORS.length])}>{c}</button>))}
+    </div>
+    <div style={{display:"flex",flexDirection:"column"}}>
+      {top5.map((c,idx)=>(
+        <a key={c.id} href={c.link} target="_blank" rel="noopener noreferrer"
+          style={{display:"flex",alignItems:"center",gap:16,padding:"14px 0",borderBottom:idx<top5.length-1?"1px solid var(--gray-100)":"none"}}>
+          <span style={{width:28,height:28,borderRadius:"var(--radius-sm)",background:idx===0?"var(--green)":"var(--gray-100)",color:idx===0?"#fff":"var(--gray-400)",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{idx+1}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{fontSize:14,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:4}}>{c.title}</p>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <LevelBadge level={c.level}/><StarRating rating={c.rating}/>
+              <span style={{fontSize:12,color:"var(--gray-400)"}}>수강생 {nf(c.students)}명</span>
+            </div>
+          </div>
+          <PriceText price={c.price}/>
+        </a>
+      ))}
+    </div>
+  </div>;
+}
+
+// ── Facet 멀티선택 ────────────────────────────────────────
+function Facet({label,options,selected,onToggle}){
+  const [q,setQ]=useState("");
+  const list=useMemo(()=>{
+    const ql=q.trim().toLowerCase();
+    return options.filter(o=>!ql||o.value.toLowerCase().includes(ql)).slice(0,200);
+  },[options,q]);
+  return <div style={{border:"1px solid var(--gray-200)",borderRadius:"var(--radius-md)",padding:12,background:"var(--white)"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <span style={{fontSize:12,fontWeight:700,color:"var(--gray-800)"}}>{label}</span>
+      <span style={{fontSize:11,color:selected.size?"var(--green-dark)":"var(--gray-400)",fontWeight:600}}>{selected.size?`${selected.size} 선택`:`${options.length}개`}</span>
+    </div>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="검색"
+      style={{width:"100%",border:"1px solid var(--gray-200)",borderRadius:6,padding:"6px 9px",fontSize:12,marginBottom:8,outline:"none"}}/>
+    <div style={{maxHeight:170,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+      {list.map(o=>{
+        const on=selected.has(o.value);
+        return <div key={o.value} className="opt-row" onClick={()=>onToggle(o.value)}
+          style={{display:"flex",alignItems:"center",gap:7,padding:"5px 6px",borderRadius:5}}>
+          <span style={{width:15,height:15,borderRadius:4,border:on?"none":"1.5px solid var(--gray-200)",background:on?"var(--green)":"#fff",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+          <span style={{fontSize:12,color:"var(--gray-800)",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.value}</span>
+          <span style={{fontSize:10,color:"var(--gray-400)"}}>{nf(o.count)}</span>
+        </div>;
+      })}
+      {list.length===0&&<p style={{fontSize:11,color:"var(--gray-400)",padding:"8px 6px"}}>결과 없음</p>}
+    </div>
+  </div>;
+}
+
+// ── 스택 기반 필터 ────────────────────────────────────────
+function StackFilter({courses}){
+  const empty=()=>({cat1:new Set(),cat1Mid:new Set(),cat2:new Set(),cat2Mid:new Set(),tags:new Set(),level:new Set()});
+  const [sel,setSel]=useState(empty);
+  const [subOnly,setSubOnly]=useState(false);
+  const [priceMode,setPriceMode]=useState("all");
+  const [q,setQ]=useState("");
+  const [sortKey,setSortKey]=useState("students");
+  const [visible,setVisible]=useState(60);
+  const [copied,setCopied]=useState(false);
+
+  const facetOptions=useMemo(()=>{
+    const out={};
+    FACETS.forEach(f=>{
+      const m=new Map();
+      courses.forEach(c=>{
+        const v=c[f.key];
+        if(f.arr){(v||[]).forEach(x=>{if(x)m.set(x,(m.get(x)||0)+1);});}
+        else if(v){m.set(v,(m.get(v)||0)+1);}
+      });
+      out[f.key]=[...m.entries()].map(([value,count])=>({value,count})).sort((a,b)=>b.count-a.count);
+    });
+    return out;
+  },[courses]);
+
+  const toggle=(key,value)=>setSel(prev=>{
+    const next={...prev}; const set=new Set(prev[key]);
+    set.has(value)?set.delete(value):set.add(value); next[key]=set; return next;
+  });
+
+  const filtered=useMemo(()=>{
+    const ql=q.trim().toLowerCase();
+    return courses.filter(c=>{
+      for(const f of FACETS){
+        const set=sel[f.key]; if(set.size===0) continue;
+        if(f.arr){ if(!(c[f.key]||[]).some(x=>set.has(x))) return false; }
+        else if(!set.has(c[f.key])) return false;
+      }
+      if(subOnly && !c.subscribable) return false;
+      if(priceMode==="free" && !isFree(c.price)) return false;
+      if(priceMode==="paid" && isFree(c.price)) return false;
+      if(ql && !((c.title||"")+" "+(c.instructor||"")).toLowerCase().includes(ql)) return false;
+      return true;
+    });
+  },[courses,sel,subOnly,priceMode,q]);
+
+  const sorted=useMemo(()=>{
+    const a=[...filtered];
+    if(sortKey==="students") a.sort((x,y)=>y.students-x.students);
+    else if(sortKey==="priceAsc") a.sort((x,y)=>numPrice(x.price)-numPrice(y.price));
+    else if(sortKey==="priceDesc") a.sort((x,y)=>numPrice(y.price)-numPrice(x.price));
+    else if(sortKey==="rating") a.sort((x,y)=>y.rating-x.rating);
+    return a;
+  },[filtered,sortKey]);
+
+  useEffect(()=>{setVisible(60);},[sel,subOnly,priceMode,q,sortKey]);
+  useEffect(()=>{setCopied(false);},[sel,subOnly,priceMode,q]);
+
+  const activeCount=FACETS.reduce((a,f)=>a+sel[f.key].size,0)+(subOnly?1:0)+(priceMode!=="all"?1:0)+(q.trim()?1:0);
+  const subCnt=filtered.filter(c=>c.subscribable).length;
+  const freeCnt=filtered.filter(c=>isFree(c.price)).length;
+
+  const copyTSV=()=>{
+    const head=["강의명","강사","레벨","수강생","가격","구독","링크"].join("\t");
+    const lines=sorted.map(c=>[c.title,c.instructor,c.level,c.students,isFree(c.price)?"무료":c.price,c.subscribable?"구독":"구매",c.link].join("\t"));
+    const tsv=[head,...lines].join("\n");
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(tsv).then(()=>setCopied(true)).catch(()=>fallback(tsv));
+    } else fallback(tsv);
+  };
+  const fallback=(text)=>{
+    const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta);
+    ta.select(); try{document.execCommand("copy"); setCopied(true);}catch(e){} document.body.removeChild(ta);
   };
 
-  function StarRating({rating}){
-    const r = Number(rating)||0;
-    return <span style={{display:"flex",alignItems:"center",gap:3}}>
-      <span style={{color:"#F59E0B",fontSize:11,letterSpacing:1}}>
-        {"★".repeat(Math.round(r))}{"☆".repeat(5-Math.round(r))}
-      </span>
-      <span style={{fontSize:11,color:"var(--gray-400)",fontWeight:500}}>{r.toFixed(1)}</span>
-    </span>;
-  }
+  const th={fontSize:11,fontWeight:600,color:"var(--gray-400)",padding:"10px 14px",textAlign:"left",borderBottom:"1px solid var(--gray-200)",whiteSpace:"nowrap",letterSpacing:"0.3px"};
+  const td={fontSize:13,color:"var(--gray-800)",padding:"11px 14px",borderBottom:"1px solid var(--gray-100)",verticalAlign:"middle"};
 
-  function PriceText({price}){
-    if(!price||price===""||price===0) return <span style={{color:"var(--green)",fontWeight:600,fontSize:13}}>무료</span>;
-    return <span style={{color:"var(--black)",fontWeight:600,fontSize:13}}>{Number(price).toLocaleString()}원</span>;
-  }
+  return <div style={s.section}>
+    <p style={s.sectionTitle}>스택 기반 강좌 필터</p>
+    <p style={s.sectionSub}>고객사 개발 스택·직무에 맞춰 6개 차원으로 강좌를 추려 제안 목록을 만드세요 (같은 차원 안=OR, 차원 간=AND)</p>
 
-  function SubBadge({subscribable}){
-    if(subscribable) return <span style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:"var(--green-light)",color:"var(--green-dark)",fontWeight:600}}>구독</span>;
-    return <span style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:"var(--gray-100)",color:"var(--gray-400)"}}>구매</span>;
-  }
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:12,marginBottom:16}}>
+      {FACETS.map(f=>(<Facet key={f.key} label={f.label} options={facetOptions[f.key]} selected={sel[f.key]} onToggle={v=>toggle(f.key,v)}/>))}
+    </div>
 
-  function CourseTable({courses}){
-    const [rows,setRows]=useState(courses.map((c,i)=>({...c,_key:i})));
-    const dragIdx=useRef(null);
-    const [dragOver,setDragOver]=useState(null);
-    const onDragStart=i=>{dragIdx.current=i;};
-    const onDrop=i=>{
-      if(dragIdx.current===null||dragIdx.current===i)return;
-      setRows(prev=>{const next=[...prev];const[moved]=next.splice(dragIdx.current,1);next.splice(i,0,moved);return next;});
-      dragIdx.current=null;setDragOver(null);
-    };
-    const th={fontSize:11,fontWeight:600,color:"var(--gray-400)",padding:"10px 14px",textAlign:"left",borderBottom:"1px solid var(--gray-200)",whiteSpace:"nowrap",letterSpacing:"0.3px",textTransform:"uppercase"};
-    const td={fontSize:13,color:"var(--gray-800)",padding:"12px 14px",borderBottom:"1px solid var(--gray-100)",verticalAlign:"middle"};
-    return <div style={{overflowX:"auto",borderRadius:"var(--radius-md)",border:"1px solid var(--gray-200)"}}>
-      <table style={{width:"100%",borderCollapse:"collapse",minWidth:620}}>
+    <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",marginBottom:18}}>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="강의명·강사 검색"
+        style={{flex:"1 1 200px",minWidth:160,border:"1px solid var(--gray-200)",borderRadius:8,padding:"9px 12px",fontSize:13,outline:"none"}}/>
+      <button onClick={()=>setSubOnly(v=>!v)} style={s.tag(subOnly,"var(--green)")}>구독 가능만</button>
+      <button onClick={()=>setPriceMode(m=>m==="free"?"all":"free")} style={s.tag(priceMode==="free","var(--green)")}>무료만</button>
+      <button onClick={()=>setPriceMode(m=>m==="paid"?"all":"paid")} style={s.tag(priceMode==="paid","var(--gray-800)")}>유료만</button>
+      <select value={sortKey} onChange={e=>setSortKey(e.target.value)}
+        style={{border:"1px solid var(--gray-200)",borderRadius:8,padding:"9px 12px",fontSize:13,color:"var(--gray-800)",outline:"none",cursor:"pointer"}}>
+        <option value="students">수강생 많은순</option>
+        <option value="rating">평점 높은순</option>
+        <option value="priceDesc">가격 높은순</option>
+        <option value="priceAsc">가격 낮은순</option>
+      </select>
+      {activeCount>0 && <button onClick={()=>{setSel(empty());setSubOnly(false);setPriceMode("all");setQ("");}}
+        style={{border:"1px solid var(--gray-200)",background:"#fff",borderRadius:8,padding:"9px 12px",fontSize:12,color:"var(--gray-600)",cursor:"pointer"}}>초기화 ({activeCount})</button>}
+    </div>
+
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10,marginBottom:12}}>
+      <p style={{fontSize:13,color:"var(--gray-600)"}}>
+        조건에 맞는 강좌 <b style={{color:"var(--black)",fontSize:15}}>{nf(filtered.length)}</b>개
+        <span style={{color:"var(--gray-400)"}}> · 구독 가능 {nf(subCnt)} · 무료 {nf(freeCnt)}</span>
+      </p>
+      <button onClick={copyTSV} disabled={!filtered.length}
+        style={{border:"none",background:copied?"var(--green-dark)":"var(--green)",color:"#fff",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:600,cursor:filtered.length?"pointer":"not-allowed",opacity:filtered.length?1:0.5}}>
+        {copied?"✓ 복사됨":"목록 복사 (엑셀 붙여넣기)"}
+      </button>
+    </div>
+
+    <div style={{overflowX:"auto",borderRadius:"var(--radius-md)",border:"1px solid var(--gray-200)"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",minWidth:680}}>
         <thead style={{background:"var(--gray-50)"}}>
           <tr>
-            <th style={{...th,width:32}}></th>
             <th style={{...th,width:32,textAlign:"center"}}>#</th>
-            <th style={th}>강의명</th>
+            <th style={th}>강의명 / 기술태그</th>
             <th style={th}>강사</th>
             <th style={{...th,textAlign:"right"}}>수강생</th>
             <th style={{...th,textAlign:"right"}}>가격</th>
@@ -115,158 +400,81 @@
           </tr>
         </thead>
         <tbody>
-          {rows.map((c,i)=>(
-            <tr key={c._key} className={"drag-row"+(dragOver===i?" drag-over":"")}
-              draggable onDragStart={()=>onDragStart(i)}
-              onDragOver={e=>{e.preventDefault();setDragOver(i);}}
-              onDragLeave={()=>setDragOver(null)}
-              onDrop={()=>onDrop(i)}>
-              <td style={{...td,color:"var(--gray-200)",cursor:"grab",fontSize:16,paddingRight:0}}>⠿</td>
+          {sorted.slice(0,visible).map((c,i)=>(
+            <tr key={c.id} className="res-row">
               <td style={{...td,textAlign:"center",color:"var(--gray-400)",fontWeight:600,fontSize:12}}>{i+1}</td>
               <td style={td}>
-                <a href={c.link} target="_blank" rel="noopener noreferrer"
-                  style={{fontWeight:500,fontSize:13,display:"block",maxWidth:340,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"var(--black)"}}
-                  title={c.title}
-                  onMouseEnter={e=>e.currentTarget.style.color="var(--green)"}
-                  onMouseLeave={e=>e.currentTarget.style.color="var(--black)"}
-                >{c.title}</a>
-                <span style={s.levelBadge(c.level)}>{String(c.level||"").replace(/[[]]/g,"")}</span>
+                <a href={c.link} target="_blank" rel="noopener noreferrer" title={c.title}
+                  style={{fontWeight:500,fontSize:13,display:"block",maxWidth:420,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:4}}>{c.title}</a>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <LevelBadge level={c.level}/>
+                  {(c.tags||[]).slice(0,4).map((t,k)=>(<span key={k} style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:"var(--gray-100)",color:"var(--gray-600)"}}>{t}</span>))}
+                  {(c.tags||[]).length>4 && <span style={{fontSize:10,color:"var(--gray-400)"}}>+{c.tags.length-4}</span>}
+                </div>
               </td>
               <td style={{...td,color:"var(--gray-600)",whiteSpace:"nowrap",fontSize:12}}>{c.instructor}</td>
-              <td style={{...td,textAlign:"right",whiteSpace:"nowrap",fontSize:12,color:"var(--gray-600)"}}>{Number(c.students||0).toLocaleString()}</td>
+              <td style={{...td,textAlign:"right",whiteSpace:"nowrap",fontSize:12,color:"var(--gray-600)"}}>{nf(c.students)}</td>
               <td style={{...td,textAlign:"right",whiteSpace:"nowrap"}}><PriceText price={c.price}/></td>
               <td style={{...td,textAlign:"center"}}><SubBadge subscribable={c.subscribable}/></td>
             </tr>
           ))}
+          {sorted.length===0 && <tr><td colSpan={6} style={{textAlign:"center",padding:"48px 0",fontSize:13,color:"var(--gray-400)"}}>조건에 맞는 강좌가 없습니다</td></tr>}
         </tbody>
       </table>
-    </div>;
-  }
+    </div>
+    {visible<sorted.length && <div style={{textAlign:"center",marginTop:16}}>
+      <button onClick={()=>setVisible(v=>v+60)} style={{border:"1px solid var(--gray-200)",background:"#fff",borderRadius:8,padding:"10px 24px",fontSize:13,fontWeight:600,color:"var(--gray-800)",cursor:"pointer"}}>
+        더 보기 ({nf(sorted.length-visible)}개 남음)
+      </button>
+    </div>}
+  </div>;
+}
 
-  function App(){
-    const {totalContent:total,subscribable:sub,categories:cats,popular,allByCat}=DATA;
-    const [popTab,setPopTab]=useState(cats[0].name);
-    const [catTab,setCatTab]=useState(cats[0].name);
-    const totalCat=cats.reduce((acc,c)=>acc+c.count,0);
-    const maxCount=Math.max(...cats.map(c=>c.count),1);
-    const popCourses=popular[popTab]||[];
-    const allCourses=(allByCat&&allByCat[catTab])||[];
+// ── App ───────────────────────────────────────────────────
+function App(){
+  const [state,setState]=useState({loading:true,error:null,data:null});
+  useEffect(()=>{
+    fetch("./data.json",{cache:"no-store"})
+      .then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();})
+      .then(d=>setState({loading:false,error:null,data:d}))
+      .catch(e=>setState({loading:false,error:e.message,data:null}));
+  },[]);
 
-    return <div style={{minHeight:"100vh",background:"var(--gray-100)"}}>
+  if(state.loading) return <Center><div className="spin"/><p style={{marginTop:16,fontSize:13,color:"var(--gray-400)"}}>데이터 불러오는 중…</p></Center>;
+  if(state.error) return <Center>
+    <p style={{fontSize:14,fontWeight:600,marginBottom:6}}>데이터를 불러오지 못했어요</p>
+    <p style={{fontSize:12,color:"var(--gray-400)",maxWidth:380,textAlign:"center",lineHeight:1.6}}>같은 폴더에 <b>data.json</b>이 배포돼 있는지 확인하세요. (updater에서 데이터 배포 필요)<br/>오류: {state.error}</p>
+  </Center>;
 
-      {/* 헤더 */}
-      <header style={{background:"var(--white)",borderBottom:"1px solid var(--gray-200)"}}>
-        <div style={{maxWidth:1080,margin:"0 auto",padding:"0 24px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <svg width="90" height="22" viewBox="0 0 90 22" fill="none">
-              <text x="0" y="17" fontFamily="Pretendard,-apple-system,sans-serif" fontWeight="800" fontSize="18" fill="#00C471">inflearn</text>
-            </svg>
-            <span style={{fontSize:12,color:"var(--gray-400)",paddingLeft:10,borderLeft:"1px solid var(--gray-200)"}}>콘텐츠 현황</span>
-          </div>
-          <span style={{fontSize:11,color:"var(--gray-400)"}}>{updatedAt} 기준</span>
+  const {courses=[],exportedAt}=state.data;
+  const updatedAt=exportedAt?new Date(exportedAt).toLocaleString("ko-KR",{year:"numeric",month:"long",day:"numeric",hour:"2-digit",minute:"2-digit"}):"";
+
+  return <div style={{minHeight:"100vh"}}>
+    <header style={{background:"var(--white)",borderBottom:"1px solid var(--gray-200)"}}>
+      <div style={{maxWidth:1080,margin:"0 auto",padding:"0 24px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <svg width="90" height="22" viewBox="0 0 90 22"><text x="0" y="17" fontFamily="Pretendard,sans-serif" fontWeight="800" fontSize="18" fill="#00C471">inflearn</text></svg>
+          <span style={{fontSize:12,color:"var(--gray-400)",paddingLeft:10,borderLeft:"1px solid var(--gray-200)"}}>영업 대시보드</span>
         </div>
-      </header>
+        <span style={{fontSize:11,color:"var(--gray-400)"}}>{updatedAt} 기준</span>
+      </div>
+    </header>
+    <main style={{maxWidth:1080,margin:"0 auto",padding:"28px 24px 60px"}}>
+      <KPI courses={courses}/>
+      <CatDistribution courses={courses}/>
+      <Coverage courses={courses}/>
+      <FreePaid courses={courses}/>
+      <Popular courses={courses}/>
+      <StackFilter courses={courses}/>
+      <p style={{textAlign:"center",fontSize:11,color:"var(--gray-400)"}}>인프런 실데이터 기반 영업용 내부 문서</p>
+    </main>
+  </div>;
+}
+function Center({children}){
+  return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>{children}</div>;
+}
 
-      <main style={{maxWidth:1080,margin:"0 auto",padding:"28px 24px 60px"}}>
-
-        {/* KPI */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
-          {[
-            {label:"전체 강의",value:total.toLocaleString(),unit:"개",desc:"총 보유 콘텐츠"},
-            {label:"구독 가능",value:sub.toLocaleString(),unit:"개",desc:"구독권으로 수강 가능"},
-            {label:"카테고리",value:cats.length,unit:"개",desc:"운영 중인 분야"},
-          ].map((k,i)=>(
-            <div key={i} style={{background:"var(--white)",borderRadius:"var(--radius-lg)",border:"1px solid var(--gray-200)",padding:"24px 28px"}}>
-              <p style={{fontSize:12,color:"var(--gray-400)",marginBottom:12,fontWeight:500}}>{k.label}</p>
-              <p style={{fontSize:32,fontWeight:800,color:"var(--black)",letterSpacing:"-1px",lineHeight:1}}>
-                {k.value}<span style={{fontSize:16,fontWeight:600,color:"var(--gray-400)",marginLeft:4}}>{k.unit}</span>
-              </p>
-              <p style={{fontSize:11,color:"var(--gray-400)",marginTop:8}}>{k.desc}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* 카테고리 현황 */}
-        <div style={s.section}>
-          <p style={s.sectionTitle}>카테고리별 강의 현황</p>
-          <p style={{...s.sectionSub,marginBottom:24}}>전체 {totalCat.toLocaleString()}개 강의 분포</p>
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            {cats.map((cat,i)=>{
-              const pct=totalCat>0?((cat.count/totalCat)*100).toFixed(1):0;
-              const barPct=(cat.count/maxCount)*100;
-              const color=CAT_COLORS[i%CAT_COLORS.length];
-              return <div key={i} style={{display:"grid",gridTemplateColumns:"140px 1fr 80px",alignItems:"center",gap:16}}>
-                <span style={{fontSize:13,color:"var(--gray-800)",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cat.name}</span>
-                <div style={{height:6,borderRadius:3,background:"var(--gray-100)",overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:3,width:barPct+"%",background:color,transition:"width 0.6s ease"}}/>
-                </div>
-                <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:4}}>
-                  <span style={{fontSize:14,fontWeight:700,color:"var(--black)"}}>{cat.count.toLocaleString()}</span>
-                  <span style={{fontSize:11,color:"var(--gray-400)"}}>{pct}%</span>
-                </div>
-              </div>;
-            })}
-          </div>
-        </div>
-
-        {/* 인기 강좌 Top5 */}
-        <div style={s.section}>
-          <p style={s.sectionTitle}>카테고리별 인기 강좌 Top 5</p>
-          <p style={s.sectionSub}>수강생 수 기준</p>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:20}}>
-            {cats.map((cat,i)=>(
-              <button key={i} onClick={()=>setPopTab(cat.name)}
-                style={s.tag(popTab===cat.name, CAT_COLORS[i%CAT_COLORS.length])}>
-                {cat.name}
-              </button>
-            ))}
-          </div>
-          <div style={{display:"flex",flexDirection:"column"}}>
-            {popCourses.map((c,idx)=>(
-              <a key={idx} href={c.link} target="_blank" rel="noopener noreferrer"
-                style={{display:"flex",alignItems:"center",gap:16,padding:"14px 0",borderBottom:idx<popCourses.length-1?"1px solid var(--gray-100)":"none"}}
-                onMouseEnter={e=>{e.currentTarget.querySelector(".course-title").style.color="var(--green)"}}
-                onMouseLeave={e=>{e.currentTarget.querySelector(".course-title").style.color="var(--black)"}}>
-                <span style={{width:28,height:28,borderRadius:"var(--radius-sm)",background:idx===0?"var(--green)":"var(--gray-100)",color:idx===0?"#fff":"var(--gray-400)",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{idx+1}</span>
-                <div style={{flex:1,minWidth:0}}>
-                  <p className="course-title" style={{fontSize:14,fontWeight:600,color:"var(--black)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",transition:"color 0.1s",marginBottom:4}}>{c.title}</p>
-                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                    <span style={s.levelBadge(c.level)}>{String(c.level||"").replace(/[[]]/g,"")}</span>
-                    <StarRating rating={Number(c.rating)||0}/>
-                    <span style={{fontSize:12,color:"var(--gray-400)"}}>수강생 {Number(c.students||0).toLocaleString()}명</span>
-                  </div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <PriceText price={c.price}/>
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        {/* 전체 강좌 테이블 */}
-        <div style={s.section}>
-          <p style={s.sectionTitle}>카테고리별 전체 강좌</p>
-          <p style={s.sectionSub}>수강생 Top 20 · 행 드래그로 순서 변경 가능</p>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:20}}>
-            {cats.map((cat,i)=>(
-              <button key={i} onClick={()=>setCatTab(cat.name)}
-                style={s.tag(catTab===cat.name, CAT_COLORS[i%CAT_COLORS.length])}>
-                {cat.name}
-              </button>
-            ))}
-          </div>
-          {allCourses.length>0
-            ?<CourseTable key={catTab} courses={allCourses}/>
-            :<p style={{textAlign:"center",padding:"48px 0",fontSize:13,color:"var(--gray-400)"}}>데이터가 없습니다</p>}
-        </div>
-
-        <p style={{textAlign:"center",fontSize:11,color:"var(--gray-400)"}}>인프런 실데이터 기반 영업용 내부 문서</p>
-      </main>
-    </div>;
-  }
-
-  ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
